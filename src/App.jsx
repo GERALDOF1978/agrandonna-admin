@@ -119,7 +119,7 @@ export default function App() {
     setIsUp(false);
   };
 
-  // 5. Guardar Item no Banco
+  // 5. Guardar Item no Banco (Atualizado com merge para ser à prova de erros)
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
@@ -129,7 +129,7 @@ export default function App() {
 
     try {
       if (id) {
-        await updateDoc(doc(db, col, id), data);
+        await setDoc(doc(db, col, id), data, { merge: true });
       } else {
         // Se for sabor ou bebida nova, começa como disponível
         if (['sabores', 'bebidas'].includes(aba)) {
@@ -139,18 +139,24 @@ export default function App() {
       }
       setEdit(null);
     } catch (err) {
-      alert("Erro ao guardar os dados.");
+      console.error("Erro Firebase (Salvar):", err);
+      alert("Erro ao guardar os dados: " + err.message);
     }
   };
 
-  // 6. Alternar Disponibilidade (Esgotado / Disponível)
+  // 6. Alternar Disponibilidade (Atualizado para setDoc com merge)
   const toggleActive = async (item) => {
+    if (!item || !item.id) return;
+    
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
     const newState = item.isActive === false ? true : false; // Inverte o estado
+    
     try {
-      await updateDoc(doc(db, col, item.id), { isActive: newState });
+      // Usar setDoc com { merge: true } garante a atualização sem falhar caso falte algum campo anterior no Firebase
+      await setDoc(doc(db, col, item.id), { isActive: newState }, { merge: true });
     } catch (err) {
-      alert("Erro ao atualizar disponibilidade.");
+      console.error("Erro Firebase (Toggle Active):", err);
+      alert("Erro ao atualizar disponibilidade: " + err.message);
     }
   };
 
