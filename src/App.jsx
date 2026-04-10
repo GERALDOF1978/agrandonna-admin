@@ -4,6 +4,7 @@ import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff } from 'lucide-react';
 
+// --- CONFIGURAÇÃO FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
   authDomain: "pizzaria-a-grandonna.firebaseapp.com",
@@ -35,7 +36,7 @@ export default function App() {
   const [filtro, setFiltro] = useState(new Date().toISOString().split('T')[0]);
   const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA' });
 
-  // 1. Monitorar Autenticação
+  // 1. MONITORAR AUTENTICAÇÃO
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
       if (u) {
@@ -43,7 +44,6 @@ export default function App() {
           setUser(u);
           setHasPerm(true);
         } else {
-          // Verifica se o email está na lista de admin_users
           onSnapshot(collection(db, 'admin_users'), s => {
             const lista = s.docs.map(d => d.data().email);
             if (lista.includes(u.email)) {
@@ -62,12 +62,10 @@ export default function App() {
     });
   }, []);
 
-  // 2. Carregar Dados do Firebase
+  // 2. CARREGAR DADOS DO FIREBASE (TEMPO REAL)
   useEffect(() => {
     if (!hasPerm) return;
 
-    // CORREÇÃO CRÍTICA: ...d.data() vem primeiro, id: d.id vem no final.
-    // Isso impede que um 'id' interno (ex: id: 1) sobrescreva o ID real do documento no Firebase.
     const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => 
       setPedidos(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
@@ -92,7 +90,7 @@ export default function App() {
     };
   }, [hasPerm]);
 
-  // 3. Estatísticas do Caixa
+  // 3. ESTATÍSTICAS DO CAIXA
   const stats = useMemo(() => {
     const pedsDoDia = pedidos.filter(p => 
       new Date(p.timestamp).toISOString().split('T')[0] === filtro && p.status === 'entregue'
@@ -106,7 +104,7 @@ export default function App() {
     return { total, qtd: pedsDoDia.length, itens: Object.entries(contagem) };
   }, [pedidos, filtro]);
 
-  // 4. Upload de Imagem (ImgBB)
+  // 4. UPLOAD DE IMAGEM (ImgBB)
   const handleImg = async (file, callback) => {
     setIsUp(true);
     const fd = new FormData();
@@ -121,12 +119,12 @@ export default function App() {
     setIsUp(false);
   };
 
-  // 5. Guardar Item no Banco
+  // 5. GUARDAR ITEM NO BANCO (ADICIONAR OU EDITAR)
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
     const data = { ...edit };
-    const id = data.id; // Agora temos a garantia que este é o ID real do Firebase
+    const id = data.id;
     delete data.id;
 
     try {
@@ -134,33 +132,30 @@ export default function App() {
         await updateDoc(doc(db, col, String(id)), data);
       } else {
         if (['sabores', 'bebidas'].includes(aba)) {
-          data.isActive = true;
+          data.isActive = true; // Novos itens começam ativos por padrão
         }
         await addDoc(collection(db, col), data);
       }
       setEdit(null);
     } catch (err) {
-      console.error("Erro Firebase (Salvar):", err);
-      alert("Erro ao guardar os dados: " + err.message);
+      alert("Erro ao guardar dados: " + err.message);
     }
   };
 
-  // 6. Alternar Disponibilidade
+  // 6. LOGICA DA TRAVA DE ESTOQUE (TOGGLE)
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
-    
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
-    const newState = item.isActive === false ? true : false; 
+    const novoEstado = item.isActive === false ? true : false; 
     
     try {
-      // Como o ID agora é sempre o ID do Firebase, o updateDoc vai funcionar perfeitamente.
-      await updateDoc(doc(db, col, String(item.id)), { isActive: newState });
+      await updateDoc(doc(db, col, String(item.id)), { isActive: novoEstado });
     } catch (err) {
-      console.error("Erro Firebase (Toggle Active):", err);
-      alert("Erro ao atualizar disponibilidade: " + err.message);
+      alert("Erro ao atualizar estoque: " + err.message);
     }
   };
 
+  // --- COMPONENTE DE LOGIN ---
   if (!hasPerm) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 text-center">
       <div className="bg-gray-900 p-8 rounded-[40px] border border-gray-800 shadow-2xl">
@@ -175,6 +170,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
+      
       {/* MENU LATERAL */}
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
@@ -202,7 +198,8 @@ export default function App() {
         <button onClick={() => signOut(auth)} className="text-gray-500 font-bold text-[10px] uppercase flex items-center gap-2 p-2 hover:text-red-500 transition-colors"><LogOut size={14}/> Sair</button>
       </aside>
 
-      <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${aba === 'pedidos' ? 'bg-gray-300' : 'bg-gray-50'}`}>
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className={`flex-1 p-4 md:p-10 overflow-y-auto ${aba === 'pedidos' ? 'bg-gray-300' : 'bg-gray-50'}`}>
         <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50">
           <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
           {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
@@ -212,7 +209,7 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '', isActive: true } :
+                aba === 'sabores' ? { name: '', desc: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '', isActive: true } :
                 aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
@@ -225,12 +222,11 @@ export default function App() {
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {pedidos.map(p => (
-              <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status === 'pendente' ? 'border-red-600 animate-pulse' : 'border-transparent shadow-gray-200'}`}>
+              <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status === 'pendente' ? 'border-red-600 animate-pulse' : 'border-transparent'}`}>
                 <div className="flex justify-between border-b border-gray-50 pb-2">
                   <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">Cod: {String(p.id).slice(-4)}</span>
                   <div className="flex gap-2">
-                    <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110 transition-transform"><Phone size={14}/></button>
-                    <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={14}/></button>
+                    <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full"><Phone size={14}/></button>
                   </div>
                 </div>
                 <div className="font-black uppercase text-sm text-gray-900">{p.clientName || 'Cliente sem nome'}</div>
@@ -245,19 +241,16 @@ export default function App() {
                         <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
                       </div>
                       {it.sabores?.map((s, si) => (
-                        <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
-                          + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
-                        </p>
+                        <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight uppercase">+ {s.name}</p>
                       ))}
                     </div>
                   ))}
                 </div>
-                {/* BOTÕES DE STATUS COM CORES FIXAS */}
                 <div className="grid grid-cols-2 gap-1.5 mt-2">
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status === 'pendente' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status === 'preparando' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status === 'entregue' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
                 </div>
                 <div className="font-black text-green-600 text-center text-xl pt-2">R$ {p.total?.toFixed(2)}</div>
               </div>
@@ -265,72 +258,42 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PÁGINA DE SABORES / BEBIDAS / EQUIPE (TABELA UNIFICADA) --- */}
+        {/* --- PÁGINA DE LISTAGEM (SABORES, BEBIDAS, ETC) --- */}
         {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
-                <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Preços / Informação</th><th className="p-6 text-right">Ações</th></tr>
+                <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Informação</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
               <tbody>{(aba === 'sabores' ? sabores : aba === 'bebidas' ? bebidas : aba === 'banners' ? banners : equipe).map(it => (
-                <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
+                <tr key={it.id} className={`border-b border-gray-50 transition-all ${it.isActive === false ? 'bg-red-50/50' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
-                    <div className="relative">
-                      {(it.img || it.imageUrl) ? (
-                        <img src={it.img || it.imageUrl} className={`w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white ${it.isActive === false ? 'grayscale opacity-50' : ''}`}/>
-                      ) : (
-                        <div className={`w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-white ${it.isActive === false ? 'text-red-300' : 'text-gray-300'}`}>
-                          {aba === 'sabores' ? <Pizza size={24}/> : aba === 'bebidas' ? <CupSoda size={24}/> : <User size={24}/>}
-                        </div>
-                      )}
-                    </div>
+                    <img src={it.img || it.imageUrl || cfg.logo} className={`w-14 h-14 rounded-2xl object-cover border-2 border-white ${it.isActive === false ? 'grayscale opacity-40' : ''}`}/>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <p className={`font-black uppercase text-xs tracking-tighter ${it.isActive === false ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {it.name || it.title || it.nome}
-                        </p>
-                        {['sabores', 'bebidas'].includes(aba) && it.isActive === false && (
-                          <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
-                        )}
-                      </div>
-                      
-                      {/* INGREDIENTES EM VERMELHO E NEGRITO (SÓ PARA SABORES) */}
-                      {aba === 'sabores' && (
-                        <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>
-                          {it.desc || it.description || '⚠️ Sem ingredientes cadastrados.'}
-                        </p>
-                      )}
+                      <p className={`font-black uppercase text-xs tracking-tighter ${it.isActive === false ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{it.name || it.title || it.nome}</p>
+                      {aba === 'sabores' && <p className="text-[10px] font-black italic text-red-600 uppercase">{it.desc}</p>}
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
-                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>Preço: R$ {it.price.toFixed(2)}</span>}
-                    {aba === 'sabores' && it.prices && (
-                      <div className="flex flex-col gap-1">
-                        <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>G: R$ {it.prices.grande}</span>
-                        <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>GG: R$ {it.prices.gigante}</span>
-                        {it.prices.meio_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1/2M: R$ {it.prices.meio_metro}</span>}
-                      </div>
-                    )}
-                    {aba === 'equipe' && <span className="lowercase">{it.email}</span>}
-                    {aba === 'banners' && <span className="text-[8px] text-gray-300 truncate max-w-[150px] block">{it.imageUrl}</span>}
+                    {aba === 'bebidas' && <span>R$ {it.price?.toFixed(2)}</span>}
+                    {aba === 'sabores' && it.prices && <span>G: R$ {it.prices.grande} | GG: R$ {it.prices.gigante}</span>}
+                    {aba === 'equipe' && <span>{it.email}</span>}
                   </td>
-                  <td className="p-6 text-right space-x-2 whitespace-nowrap">
+                  <td className="p-6 text-right space-x-2">
+                    
+                    {/* BOTÃO TRAVA DE ESTOQUE (ON/OFF) */}
                     {['sabores', 'bebidas'].includes(aba) && (
                       <button 
                         onClick={() => toggleActive(it)} 
-                        className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}
-                        title={it.isActive === false ? "Voltar a Vender" : "Marcar como Esgotado"}
+                        className={`p-3 rounded-2xl transition-all shadow-sm ${it.isActive === false ? 'bg-red-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                        title={it.isActive === false ? "Produto Esgotado - Clique para Ativar" : "Produto Ativo - Clique para Esgotar"}
                       >
                         {it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </button>
                     )}
-                    <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
-                    <button onClick={async () => { 
-                      if (window.confirm('Eliminar permanentemente?')) {
-                        const collectionName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
-                        await deleteDoc(doc(db, collectionName, String(it.id)));
-                      }
-                    }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
+
+                    <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"><Edit2 size={16}/></button>
+                    <button onClick={async () => { if(confirm('Excluir?')) await deleteDoc(doc(db, aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users', String(it.id))); }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}</tbody>
@@ -341,50 +304,44 @@ export default function App() {
         {/* --- PÁGINA DO CAIXA --- */}
         {aba === 'caixa' && (
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="bg-white p-6 rounded-[30px] border flex items-center gap-4">
               <Search className="text-gray-400" size={20}/>
-              <input type="date" className="bg-transparent font-black outline-none w-full text-gray-900" value={filtro} onChange={e => setFiltro(e.target.value)} />
+              <input type="date" className="bg-transparent font-black outline-none w-full" value={filtro} onChange={e => setFiltro(e.target.value)} />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border border-green-100"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Faturamento</p><p className="text-3xl font-black text-green-600">R$ {stats.total.toFixed(2)}</p></div>
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Ticket Médio</p><p className="text-3xl font-black text-gray-800">R$ {(stats.total / (stats.qtd || 1)).toFixed(2)}</p></div>
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Pedidos OK</p><p className="text-4xl font-black text-blue-600">{stats.qtd}</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-8 rounded-[40px] text-center border-b-4 border-green-500 shadow-sm"><p className="text-[10px] font-black text-gray-400 uppercase">Faturamento</p><p className="text-3xl font-black text-green-600">R$ {stats.total.toFixed(2)}</p></div>
+              <div className="bg-white p-8 rounded-[40px] text-center shadow-sm"><p className="text-[10px] font-black text-gray-400 uppercase">Pedidos</p><p className="text-4xl font-black text-gray-800">{stats.qtd}</p></div>
             </div>
-            <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
-              <h3 className="font-black uppercase text-xs text-gray-400 border-b border-gray-50 pb-4">Ranking de Vendas do Dia</h3>
+            <div className="bg-white p-8 rounded-[40px] shadow-sm space-y-4">
+              <h3 className="font-black uppercase text-xs text-gray-400 border-b pb-4">Itens Vendidos</h3>
               {stats.itens.map(([n, q]) => (
-                <div key={n} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2">
-                  <span className="text-gray-800 uppercase text-xs">{n}</span>
-                  <span className="bg-red-50 text-red-600 px-4 py-1 rounded-full text-xs font-black">{q}x</span>
+                <div key={n} className="flex justify-between font-bold text-xs border-b border-gray-50 pb-2">
+                  <span>{n}</span>
+                  <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full">{q}x</span>
                 </div>
               ))}
-              {stats.itens.length === 0 && <p className="text-center py-10 text-gray-300 font-bold uppercase">Nenhuma venda hoje.</p>}
             </div>
           </div>
         )}
 
         {/* --- CONFIGURAÇÕES DO SISTEMA --- */}
         {aba === 'sistema' && (
-          <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
-             <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
+          <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl space-y-6 mx-auto">
+             <div className="flex flex-col items-center gap-3">
                 <img src={cfg.logo} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
-                <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all uppercase flex items-center gap-2">
+                <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer uppercase flex items-center gap-2">
                   {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} Trocar Logo
                   <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, logo: url }))} />
                 </label>
              </div>
-             <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
+             <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all ${cfg.aberto ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                <Power size={22}/> {cfg.aberto ? 'LOJA ESTÁ ABERTA' : 'LOJA FECHADA'}
              </button>
-             <div className="space-y-4 pt-4">
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })} placeholder="Ex: 19997650322"/></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Taxa de Entrega</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.taxa} onChange={e => setCfg({ ...cfg, taxa: parseFloat(e.target.value) })} placeholder="R$"/></div>
-                </div>
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Título da Impressão</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })} placeholder="A GRANDONNA"/></div>
+             <div className="space-y-4">
+                <input className="w-full p-4 bg-gray-50 border rounded-[24px] font-bold" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })} placeholder="WhatsApp"/>
+                <input type="number" className="w-full p-4 bg-gray-50 border rounded-[24px] font-bold" value={cfg.taxa} onChange={e => setCfg({ ...cfg, taxa: parseFloat(e.target.value) })} placeholder="Taxa Entrega"/>
              </div>
-             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Sistema Atualizado!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl hover:scale-95 transition-all">Guardar Configurações</button>
+             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Salvo!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl">Guardar Tudo</button>
           </div>
         )}
       </main>
@@ -394,29 +351,26 @@ export default function App() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black uppercase italic border-b pb-4 flex justify-between items-center text-gray-800 tracking-tighter">Configurar {aba} <button type="button" onClick={() => setEdit(null)}><X size={30} className="text-gray-300 hover:text-black"/></button></h2>
-            {['sabores', 'bebidas', 'banners'].includes(aba) && (
-              <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                 <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />
-                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center">
-                   {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
+            <div className="flex flex-col items-center gap-4">
+                 <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl" />
+                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer flex gap-2 items-center">
+                   {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? '...' : 'Subir Foto'}
                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setEdit({ ...edit, [aba === 'banners' ? 'imageUrl' : 'img']: url }))} />
                  </label>
-              </div>
-            )}
+            </div>
             <div className="space-y-4">
-              <input placeholder="Nome do Item / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
-              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate, manjericão...)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
+              <input placeholder="Nome" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
+              {aba === 'sabores' && <textarea placeholder="Ingredientes" className="w-full h-24 p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.desc || ''} onChange={e => setEdit({ ...edit, desc: e.target.value })} />}
               {aba === 'sabores' && (
                 <div className="grid grid-cols-2 gap-4">
-                  {['grande', 'gigante', 'meio_metro'].map(t => (
-                    <div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t.replace('_',' ')}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, [t]: parseFloat(e.target.value) } })}/></div>
-                  ))}
+                  <input type="number" placeholder="Preço G" className="p-4 bg-gray-50 border rounded-2xl font-bold" value={edit.prices?.grande || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, grande: parseFloat(e.target.value) } })}/>
+                  <input type="number" placeholder="Preço GG" className="p-4 bg-gray-50 border rounded-2xl font-bold" value={edit.prices?.gigante || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, gigante: parseFloat(e.target.value) } })}/>
                 </div>
               )}
-              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
-              {aba === 'equipe' && <input placeholder="E-mail Gmail do funcionário" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
+              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
+              {aba === 'equipe' && <input placeholder="E-mail Gmail" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
             </div>
-            <button type="submit" disabled={isUp} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
+            <button type="submit" disabled={isUp} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl disabled:opacity-50">Confirmar Alterações</button>
           </form>
         </div>
       )}
