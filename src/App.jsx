@@ -66,20 +66,22 @@ export default function App() {
   useEffect(() => {
     if (!hasPerm) return;
 
+    // CORREÇÃO CRÍTICA: ...d.data() vem primeiro, id: d.id vem no final.
+    // Isso impede que um 'id' interno (ex: id: 1) sobrescreva o ID real do documento no Firebase.
     const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => 
-      setPedidos(s.docs.map(d => ({ id: d.id, ...d.data() })))
+      setPedidos(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => 
-      setSabores(s.docs.map(d => ({ id: d.id, ...d.data() })))
+      setSabores(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => 
-      setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() })))
+      setBebidas(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => 
-      setBanners(s.docs.map(d => ({ id: d.id, ...d.data() })))
+      setBanners(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => 
-      setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() })))
+      setEquipe(s.docs.map(d => ({ ...d.data(), id: d.id })))
     );
     const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => 
       s.exists() && setCfg(s.data())
@@ -119,20 +121,18 @@ export default function App() {
     setIsUp(false);
   };
 
-  // 5. Guardar Item no Banco (Corrigido para usar updateDoc estrito)
+  // 5. Guardar Item no Banco
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
     const data = { ...edit };
-    const id = data.id;
+    const id = data.id; // Agora temos a garantia que este é o ID real do Firebase
     delete data.id;
 
     try {
       if (id) {
-        // Atualiza apenas se o documento existir, impedindo criação de itens em branco
         await updateDoc(doc(db, col, String(id)), data);
       } else {
-        // Se for sabor ou bebida nova, começa como disponível
         if (['sabores', 'bebidas'].includes(aba)) {
           data.isActive = true;
         }
@@ -145,15 +145,15 @@ export default function App() {
     }
   };
 
-  // 6. Alternar Disponibilidade (Corrigido para usar updateDoc estrito)
+  // 6. Alternar Disponibilidade
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
     
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
-    const newState = item.isActive === false ? true : false; // Inverte o estado
+    const newState = item.isActive === false ? true : false; 
     
     try {
-      // Atualiza estritamente o item com o ID especificado. Se não existir, falha e não cria lixo.
+      // Como o ID agora é sempre o ID do Firebase, o updateDoc vai funcionar perfeitamente.
       await updateDoc(doc(db, col, String(item.id)), { isActive: newState });
     } catch (err) {
       console.error("Erro Firebase (Toggle Active):", err);
@@ -297,7 +297,6 @@ export default function App() {
                       {/* INGREDIENTES EM VERMELHO E NEGRITO (SÓ PARA SABORES) */}
                       {aba === 'sabores' && (
                         <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>
-                          {/* Verifica tanto 'desc' como 'description' para garantir compatibilidade com registos antigos */}
                           {it.desc || it.description || '⚠️ Sem ingredientes cadastrados.'}
                         </p>
                       )}
