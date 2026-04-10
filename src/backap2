@@ -119,7 +119,7 @@ export default function App() {
     setIsUp(false);
   };
 
-  // 5. Guardar Item no Banco
+  // 5. Guardar Item no Banco (Atualizado com merge para ser à prova de erros)
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
@@ -129,7 +129,8 @@ export default function App() {
 
     try {
       if (id) {
-        await updateDoc(doc(db, col, id), data);
+        // O Firebase exige que o ID seja sempre uma string
+        await setDoc(doc(db, col, String(id)), data, { merge: true });
       } else {
         // Se for sabor ou bebida nova, começa como disponível
         if (['sabores', 'bebidas'].includes(aba)) {
@@ -139,18 +140,25 @@ export default function App() {
       }
       setEdit(null);
     } catch (err) {
-      alert("Erro ao guardar os dados.");
+      console.error("Erro Firebase (Salvar):", err);
+      alert("Erro ao guardar os dados: " + err.message);
     }
   };
 
-  // 6. Alternar Disponibilidade (Esgotado / Disponível)
+  // 6. Alternar Disponibilidade (Atualizado para setDoc com merge)
   const toggleActive = async (item) => {
+    if (!item || !item.id) return;
+    
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
     const newState = item.isActive === false ? true : false; // Inverte o estado
+    
     try {
-      await updateDoc(doc(db, col, item.id), { isActive: newState });
+      // Usar setDoc com { merge: true } garante a atualização sem falhar caso falte algum campo anterior no Firebase
+      // String(item.id) garante que o erro r.indexOf is not a function não volte a acontecer
+      await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true });
     } catch (err) {
-      alert("Erro ao atualizar disponibilidade.");
+      console.error("Erro Firebase (Toggle Active):", err);
+      alert("Erro ao atualizar disponibilidade: " + err.message);
     }
   };
 
@@ -220,7 +228,7 @@ export default function App() {
             {pedidos.map(p => (
               <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status === 'pendente' ? 'border-red-600 animate-pulse' : 'border-transparent shadow-gray-200'}`}>
                 <div className="flex justify-between border-b border-gray-50 pb-2">
-                  <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">Cod: {p.id.slice(-4)}</span>
+                  <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">Cod: {String(p.id).slice(-4)}</span>
                   <div className="flex gap-2">
                     <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110 transition-transform"><Phone size={14}/></button>
                     <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={14}/></button>
@@ -247,10 +255,10 @@ export default function App() {
                 </div>
                 {/* BOTÕES DE STATUS COM CORES FIXAS */}
                 <div className="grid grid-cols-2 gap-1.5 mt-2">
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
                 </div>
                 <div className="font-black text-green-600 text-center text-xl pt-2">R$ {p.total?.toFixed(2)}</div>
               </div>
@@ -319,7 +327,12 @@ export default function App() {
                       </button>
                     )}
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
-                    <button onClick={async () => { if (window.confirm('Eliminar permanentemente?')) await deleteDoc(doc(db, aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users', it.id)) }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
+                    <button onClick={async () => { 
+                      if (window.confirm('Eliminar permanentemente?')) {
+                        const collectionName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
+                        await deleteDoc(doc(db, collectionName, String(it.id)));
+                      }
+                    }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}</tbody>
