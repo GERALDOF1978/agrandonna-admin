@@ -22,11 +22,11 @@ export default function Admin() {
   const [user, setUser] = useState(null); const [perm, setPerm] = useState(false);
   const [aba, setAba] = useState('pedidos'); const [peds, setPeds] = useState([]);
   const [sabs, setSabs] = useState([]); const [bebs, setBebs] = useState([]);
-  const [bans, setBanners] = useState([]); const [edit, setEdit] = useState(null);
+  const [bans, setBans] = useState([]); const [edit, setEdit] = useState(null);
   const [upL, setUpL] = useState(false); const [masterOk, setMasterOk] = useState(false);
   const [equipe, setEquipe] = useState([]);
   const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split('T')[0]);
-  const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', cabecalho: 'A GRANDONNA', rodape: 'Volte Sempre!' });
+  const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg' });
 
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
@@ -51,17 +51,6 @@ export default function Admin() {
   }, [perm]);
 
   const nPendentes = useMemo(() => peds.filter(p => p.status === 'pendente').length, [peds]);
-  
-  const statsCaixa = useMemo(() => {
-    const pedsDia = peds.filter(p => new Date(p.timestamp).toISOString().split('T')[0] === dataFiltro && p.status === 'entregue');
-    const total = pedsDia.reduce((a, b) => a + (b.total || 0), 0);
-    const contagem = {};
-    pedsDia.flatMap(p => p.items).forEach(i => {
-      const nome = i.tipo === 'pizza' ? `Pizza ${i.tamanho?.name}` : i.name;
-      contagem[nome] = (contagem[nome] || 0) + 1;
-    });
-    return { total, qtd: pedsDia.length, detalhes: Object.entries(contagem) };
-  }, [peds, dataFiltro]);
 
   const handleUp = async (file, cb) => {
     setUpL(true); const fd = new FormData(); fd.append('image', file);
@@ -79,23 +68,14 @@ export default function Admin() {
     setEdit(null);
   };
 
-  if (!perm) return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <div className="bg-gray-900 p-10 rounded-[50px] w-full max-w-sm text-center border border-gray-800 shadow-2xl">
-        <img src={cfg.logo} className="w-24 h-24 rounded-full mx-auto mb-6 border-2 border-yellow-500 shadow-lg object-cover"/>
-        <button onClick={()=>signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl">
-          <img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar no Painel
-        </button>
-      </div>
-    </div>
-  );
+  if (!perm) return <div className="min-h-screen bg-black flex items-center justify-center p-4"><button onClick={()=>signInWithPopup(auth, provider)} className="bg-white p-4 rounded-2xl font-black uppercase shadow-xl">Entrar no Admin</button></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-30">
         <div className="flex items-center gap-3 border-b border-gray-800 pb-4 mb-2">
           <img src={cfg.logo} className="w-10 h-10 rounded-full border border-yellow-500 object-cover"/>
-          <p className="font-black text-yellow-500 text-[10px] uppercase">A Grandonna</p>
+          <p className="font-black text-yellow-500 text-[10px] uppercase tracking-widest">Painel Admin</p>
         </div>
         <nav className="space-y-1 flex-1">
           {['pedidos','sabores','bebidas','banners','caixa','equipe','sistema'].map(m => (
@@ -124,36 +104,27 @@ export default function Admin() {
                 <div className="flex justify-between border-b pb-3">
                   <span className="font-black text-xs text-gray-400">#{p.id.slice(-4).toUpperCase()}</span>
                   <div className="flex gap-2">
-                    <button onClick={()=>window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full"><Phone size={16}/></button>
+                    <button onClick={()=>window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110"><Phone size={16}/></button>
                     <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={16}/></button>
                   </div>
                 </div>
-                <div className="font-black uppercase text-sm flex items-center gap-2"><User size={16} className="text-red-600"/> {p.clientName}</div>
-                <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100"><MapPin size={12} className="inline mr-1 text-red-500"/> {p.entrega==='retirada'?'BALCÃO':`${p.end?.rua}, ${p.end?.num}`}</div>
-                
+                <div className="font-black uppercase text-sm text-gray-900">{p.clientName}</div>
+                <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl"><MapPin size={12} className="inline mr-1 text-red-500"/> {p.entrega==='retirada'?'BALCÃO':`${p.end?.rua}, ${p.end?.num}`}</div>
                 <div className="flex-1 py-2 space-y-3 border-y border-gray-100">
                    {p.items?.map((it,idx)=>(
-                     <div key={idx} className="flex flex-col gap-1">
-                        <div className="flex justify-between font-bold text-xs">
-                          <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                          <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
-                        </div>
-                        {/* INGREDIENTES NO PEDIDO */}
+                     <div key={idx}>
+                        <div className="flex justify-between font-bold text-xs"><span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span><span>R$ {it.preco?.toFixed(2)}</span></div>
                         {it.sabores?.map(s => (
-                          <div key={s.id} className="bg-gray-50/50 p-1.5 rounded">
-                            <p className="text-[9px] text-red-600 uppercase font-black tracking-tight">{s.name}</p>
-                            <p className="text-[9px] text-gray-500 italic font-medium leading-tight">({s.desc || s.description || 'Sem detalhes'})</p>
+                          <div key={s.id} className="bg-gray-50 p-1.5 rounded mt-1">
+                            <p className="text-[9px] text-red-600 font-black uppercase">{s.name}</p>
+                            <p className="text-[9px] text-gray-500 leading-tight">({s.desc || s.description || 'Sem descrição'})</p>
                           </div>
                         ))}
                      </div>
                    ))}
                 </div>
-
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='pendente'?'bg-red-600 text-white shadow-red-200':'bg-gray-100 text-gray-400 hover:bg-red-50'}`}>Pendente</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'preparando'})} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='preparando'?'bg-yellow-500 text-white shadow-yellow-100':'bg-gray-100 text-gray-400 hover:bg-yellow-50'}`}>Cozinha</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'saiu_entrega'})} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='saiu_entrega'?'bg-blue-600 text-white shadow-blue-100':'bg-gray-100 text-gray-400 hover:bg-blue-50'}`}>Entrega</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'entregue'})} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='entregue'?'bg-green-600 text-white shadow-green-100':'bg-gray-100 text-gray-400 hover:bg-green-50'}`}>Concluído</button>
+                  {['pendente','preparando','saiu_entrega','entregue'].map(st=>(<button key={st} onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:st})} className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status===st?'bg-red-600 text-white shadow-md':'bg-gray-100 text-gray-400'}`}>{st}</button>))}
                 </div>
                 <div className="font-black text-green-600 text-center text-xl pt-3 border-t">R$ {p.total?.toFixed(2)}</div>
               </div>
@@ -161,84 +132,38 @@ export default function Admin() {
           </div>
         )}
 
-        {aba === 'caixa' && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border flex items-center gap-4 shadow-sm">
-              <Search size={20} className="text-gray-400"/><input type="date" className="bg-transparent font-black outline-none w-full" value={dataFiltro} onChange={e=>setDataFiltro(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center border-green-100"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Faturamento Hoje</p><p className="text-4xl font-black text-green-600">R$ {statsCaixa.total.toFixed(2)}</p></div>
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Finalizados</p><p className="text-4xl font-black">{statsCaixa.qtd}</p></div>
-            </div>
-            <div className="bg-white p-8 rounded-[40px] border space-y-4">
-              <h3 className="font-black uppercase text-xs text-gray-400 border-b pb-4">Ranking de Vendas</h3>
-              {statsCaixa.detalhes.map(([nome, qtd]) => (
-                <div key={nome} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2"><span>{nome}</span><span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs">{qtd}x</span></div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {['sabores','bebidas','banners','equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
-                <tr><th className="p-6">Item / Ingredientes</th><th className="p-6">Preços Cadastrados</th><th className="p-6 text-right">Ações</th></tr>
+                <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Valores Cadastrados</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
               <tbody>{(aba==='sabores'?sabs:aba==='bebidas'?bebs:aba==='banners'?bans:equipe).map(it => (
-                <tr key={it.id} className="border-b border-gray-50 hover:bg-gray-50 transition-all">
+                <tr key={it.id} className="border-b hover:bg-gray-50 transition-all">
                   <td className="p-6 flex items-center gap-4">
                     {(it.img || it.imageUrl) && <img src={it.img || it.imageUrl} className="w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white"/>}
                     <div>
-                      <p className="font-black uppercase text-xs text-gray-900 leading-none">{it.name||it.title||it.nome}</p>
-                      {/* INGREDIENTES NA LISTA DE SABORES */}
-                      <p className="text-[11px] text-red-600 font-bold italic mt-2 max-w-[300px] leading-tight">
-                        {it.desc || it.email || '⚠️ Sem ingredientes cadastrados. Clique em editar.'}
-                      </p>
+                      <p className="font-black uppercase text-xs text-gray-900">{it.name||it.title||it.nome}</p>
+                      {aba === 'sabores' && <p className="text-[11px] text-red-600 font-bold italic mt-1 max-w-[300px] leading-tight">{it.desc || '⚠️ Sem ingredientes'}</p>}
+                      {aba === 'equipe' && <p className="text-[11px] text-gray-400">{it.email}</p>}
                     </div>
                   </td>
                   <td className="p-6 font-bold text-[10px] text-gray-500 uppercase">
                     {it.price ? `R$ ${it.price.toFixed(2)}` : it.prices ? (
-                      <div className="flex flex-col gap-1">
-                        <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700">G: R$ {it.prices.grande}</span>
-                        <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700">GG: R$ {it.prices.gigante}</span>
+                      <div className="space-y-1">
+                        <span className="bg-gray-100 px-2 py-0.5 rounded inline-block mr-1">G: R$ {it.prices.grande}</span>
+                        <span className="bg-gray-100 px-2 py-0.5 rounded inline-block mr-1">GG: R$ {it.prices.gigante}</span>
+                        <span className="bg-gray-100 px-2 py-0.5 rounded inline-block">1/2M: R$ {it.prices.meio_metro}</span>
                       </div>
-                    ) : it.email || '-'}
+                    ) : '-'}
                   </td>
                   <td className="p-6 text-right">
-                    <button onClick={()=>setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all mr-2"><Edit2 size={18}/></button>
-                    <button onClick={async ()=>{if(window.confirm('Excluir?')) await deleteDoc(doc(db, aba==='sabores'?'menu_sabores':aba==='bebidas'?'menu_bebidas':aba==='banners'?'menu_banners':'admin_users', it.id))}} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={18}/></button>
+                    <button onClick={()=>setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl mr-2"><Edit2 size={18}/></button>
+                    <button onClick={async ()=>{if(window.confirm('Excluir?')) await deleteDoc(doc(db, aba==='sabores'?'menu_sabores':aba==='bebidas'?'menu_bebidas':aba==='banners'?'menu_banners':'admin_users', it.id))}} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl"><Trash2 size={18}/></button>
                   </td>
                 </tr>
               ))}</tbody>
             </table>
-          </div>
-        )}
-
-        {aba === 'sistema' && (
-          <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border space-y-8 mx-auto">
-             <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                <img src={cfg.logo} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
-                <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2 hover:bg-red-600 transition-all">
-                  <Upload size={14}/> {upL ? 'Subindo...' : 'Trocar Logo'}
-                  <input type="file" className="hidden" onChange={async e => {
-                    setUpL(true); const fd = new FormData(); fd.append('image', e.target.files[0]);
-                    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
-                    const d = await res.json(); setCfg({...cfg, logo: d.data.url}); setUpL(false);
-                  }} />
-                </label>
-             </div>
-             <button onClick={()=>setCfg({...cfg, aberto: !cfg.aberto})} className={`w-full p-6 rounded-3xl font-black uppercase flex items-center justify-center gap-3 transition-all ${cfg.aberto?'bg-green-600 text-white shadow-lg':'bg-red-600 text-white shadow-lg'}`}>
-                <Power size={22}/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
-             </button>
-             <div className="space-y-4">
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">WhatsApp da Pizzaria</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={cfg.zap} onChange={e=>setCfg({...cfg, zap: e.target.value})}/></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.tempo} onChange={e=>setCfg({...cfg, tempo: e.target.value})} /></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Taxa Entrega</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.taxa} onChange={e=>setCfg({...cfg, taxa: parseFloat(e.target.value)})}/></div>
-                </div>
-             </div>
-             <button onClick={async ()=>{await setDoc(doc(db,'loja_config','geral'), cfg); alert('Sistema Atualizado!')}} className="w-full bg-black text-white py-6 rounded-3xl font-black uppercase shadow-xl hover:scale-95 transition-all">Salvar Tudo</button>
           </div>
         )}
       </main>
@@ -250,23 +175,20 @@ export default function Admin() {
             {['sabores','bebidas','banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
                  <img src={edit.img || edit.imageUrl || cfg.logo} className="w-32 h-32 rounded-[30px] object-cover shadow-xl border-4 border-white" />
-                 <label className="bg-black text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2">
+                 <label className="bg-black text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2 hover:bg-red-600">
                    <Upload size={16}/> {upL ? 'Subindo...' : 'Carregar Foto'}
-                   <input type="file" className="hidden" onChange={async e => {
-                     setUpL(true); const fd = new FormData(); fd.append('image', e.target.files[0]);
-                     const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
-                     const d = await res.json(); setEdit({...edit, [aba==='banners'?'imageUrl':'img']: d.data.url}); setUpL(false);
-                   }} />
+                   <input type="file" className="hidden" onChange={async e => await handleUp(e.target.files[0], (url)=>setEdit({...edit, [aba==='banners'?'imageUrl':'img']: url}))} />
                  </label>
               </div>
             )}
             <div className="space-y-4">
-              <input placeholder="Nome" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
-              {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, molho, manjericão)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
+              <input placeholder="Nome" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
+              {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, molho, manjericão)" className="w-full h-32 p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
               {aba==='sabores' && <div className="grid grid-cols-2 gap-4">{['grande','gigante','meio_metro'].map(t=>(<div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={edit.prices?.[t]||0} onChange={e=>setEdit({...edit, prices: {...edit.prices, [t]: parseFloat(e.target.value)}})}/></div>))}</div>}
-              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
+              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
+              {aba==='equipe' && <input placeholder="Email Gmail" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.email} onChange={e=>setEdit({...edit, email: e.target.value})} />}
             </div>
-            <button type="submit" disabled={upL} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 transition-all">Salvar Alterações</button>
+            <button type="submit" disabled={upL} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50">Gravar Alterações</button>
           </form>
         </div>
       )}
