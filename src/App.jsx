@@ -132,7 +132,7 @@ export default function App() {
                    </div>))}
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 mt-2">
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})} className={`p-2 rounded-xl text-[7px] font-black uppercase transition-all ${p.status==='pendente'?'bg-red-600 text-white shadow-md':'bg-gray-100 text-gray-400 hover:bg-red-50'}`}>Pendente</button>
+                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status==='pendente'?'bg-red-600 text-white shadow-md':'bg-gray-100 text-gray-400 hover:bg-red-50'}`}>Pendente</button>
                   <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'preparando'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='preparando'?'bg-yellow-500 text-white shadow-yellow-100':'bg-gray-100 text-gray-400 hover:bg-yellow-50'}`}>Cozinha</button>
                   <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'saiu_entrega'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='saiu_entrega'?'bg-blue-600 text-white shadow-blue-100':'bg-gray-100 text-gray-400 hover:bg-blue-50'}`}>Entrega</button>
                   <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'entregue'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='entregue'?'bg-green-600 text-white shadow-green-100':'bg-gray-100 text-gray-400 hover:bg-green-50'}`}>Concluído</button>
@@ -143,6 +143,7 @@ export default function App() {
           </div>
         )}
 
+        {/* LISTA DE ITENS - CONFIGURADA PARA SABORES E BEBIDAS */}
         {['sabores','bebidas','banners','equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -161,7 +162,12 @@ export default function App() {
                     )}
                     <div>
                       <p className="font-black uppercase text-xs text-gray-900 tracking-tighter">{it.name||it.title||it.nome}</p>
-                      {aba === 'sabores' && <p className="text-[11px] text-red-600 font-black italic mt-1 max-w-[350px] leading-tight uppercase">{it.desc || '⚠️ Sem ingredientes cadastrados'}</p>}
+                      {/* INGREDIENTES EM VERMELHO NO LUGAR INDICADO NA FOTO */}
+                      {aba === 'sabores' && (
+                        <p className="text-[11px] text-red-600 font-black italic mt-1 max-w-[350px] leading-tight uppercase">
+                          {it.desc || '⚠️ Sem ingredientes cadastrados. Clique em editar.'}
+                        </p>
+                      )}
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
@@ -174,7 +180,6 @@ export default function App() {
                       </div>
                     )}
                     {aba === 'equipe' && <span>{it.email}</span>}
-                    {aba === 'banners' && <span className="text-[8px] text-gray-300 truncate max-w-[100px] block">{it.imageUrl}</span>}
                   </td>
                   <td className="p-6 text-right space-x-2">
                     <button onClick={()=>setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
@@ -241,7 +246,7 @@ export default function App() {
               <input placeholder="Nome" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
               {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, molho, manjericão)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
               {aba==='sabores' && <div className="grid grid-cols-2 gap-4">{['grande','gigante','meio_metro'].map(t=>(<div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={edit.prices?.[t]||0} onChange={e=>setEdit({...edit, prices: {...edit.prices, [t]: parseFloat(e.target.value)}})}/></div>))}</div>}
-              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
+              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
               {aba==='equipe' && <input placeholder="E-mail Gmail do funcionário" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={edit.email} onChange={e=>setEdit({...edit, email: e.target.value})} />}
             </div>
             <button type="submit" disabled={isUp} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all">Salvar Agora</button>
