@@ -114,12 +114,12 @@ export default function App() {
       const d = await r.json();
       callback(d.data.url);
     } catch (e) {
-      alert("Erro ao subir imagem.");
+      alert("Erro ao carregar imagem.");
     }
     setIsUp(false);
   };
 
-  // 5. Salvar Item no Banco
+  // 5. Guardar Item no Banco
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
@@ -135,7 +135,7 @@ export default function App() {
       }
       setEdit(null);
     } catch (err) {
-      alert("Erro ao guardar dados.");
+      alert("Erro ao guardar os dados.");
     }
   };
 
@@ -190,7 +190,7 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '' } :
+                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '' } :
                 aba === 'bebidas' ? { name: '', price: 0, img: '' } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
@@ -201,111 +201,47 @@ export default function App() {
 
         {/* --- PÁGINA DE PEDIDOS --- */}
         {aba === 'pedidos' && (
-  <div className="bg-[#f5f5dc] p-6 rounded-3xl grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-    {pedidos.map(p => (
-      <div key={p.id} className={`bg-white rounded-[40px] shadow-xl border-t-8 p-6 flex flex-col gap-4 ${p.status==='pendente'?'border-red-600 animate-pulse':'border-transparent'}`}>
-
-        {/* TOPO */}
-        <div className="flex justify-between border-b pb-2">
-          <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">
-            Cod: {p.id.slice(-4)}
-          </span>
-
-          <div className="flex gap-2">
-            <button 
-              onClick={()=>window.open(`https://wa.me/55${p.clientPhone}`)} 
-              className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110 transition-transform">
-              <Phone size={14}/>
-            </button>
-            <button className="p-2 bg-blue-50 text-blue-600 rounded-full">
-              <MessageCircle size={14}/>
-            </button>
-          </div>
-        </div>
-
-        {/* CLIENTE */}
-        <div className="font-black uppercase text-sm text-gray-900">
-          {p.clientName}
-        </div>
-
-        {/* ENDEREÇO */}
-        <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2">
-          <MapPin size={12} className="text-red-500 shrink-0"/> 
-          {p.entrega==='retirada'
-            ? 'BALCÃO'
-            : `${p.end?.rua}, ${p.end?.num}`}
-        </div>
-
-        {/* ITENS DO PEDIDO */}
-        <div className="flex-1 py-2 space-y-3 border-y border-gray-50">
-
-          {p.items?.map((it,idx)=>(
-            <div key={idx} className="flex flex-col">
-
-              {/* NOME + PREÇO */}
-              <div className="flex justify-between font-bold text-xs text-gray-800">
-                <span>
-                  1x {it.name || `Pizza ${it.tamanho?.name}`}
-                </span>
-                <span className="text-gray-400">
-                  R$ {it.preco?.toFixed(2)}
-                </span>
-              </div>
-
-              {/* SABORES + INGREDIENTES */}
-              {it.sabores?.map(s=>(
-                <div key={s.id} className="mt-1">
-
-                  {/* NOME DO SABOR */}
-                  <p className="text-[10px] text-red-600 font-black uppercase">
-                    + {s.name}
-                  </p>
-
-                  {/* INGREDIENTES (AGORA EMBAIXO) */}
-                  <p className="text-[9px] text-gray-500 italic leading-tight ml-2">
-                    {s.desc || 'Sem ingredientes'}
-                  </p>
-
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {pedidos.map(p => (
+              <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status === 'pendente' ? 'border-red-600 animate-pulse' : 'border-transparent shadow-gray-200'}`}>
+                <div className="flex justify-between border-b border-gray-50 pb-2">
+                  <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">Cod: {p.id.slice(-4)}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110 transition-transform"><Phone size={14}/></button>
+                    <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={14}/></button>
+                  </div>
                 </div>
-              ))}
-
-            </div>
-          ))}
-
-        </div>
-
-        {/* BOTÕES STATUS */}
-        <div className="grid grid-cols-2 gap-1.5 mt-2">
-          <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})}
-            className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status==='pendente'?'bg-red-600 text-white shadow-md':'bg-gray-100 text-gray-400 hover:bg-red-50'}`}>
-            Pendente
-          </button>
-
-          <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'preparando'})}
-            className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='preparando'?'bg-yellow-500 text-white':'bg-gray-100 text-gray-400 hover:bg-yellow-50'}`}>
-            Cozinha
-          </button>
-
-          <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'saiu_entrega'})}
-            className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='saiu_entrega'?'bg-blue-600 text-white':'bg-gray-100 text-gray-400 hover:bg-blue-50'}`}>
-            Entrega
-          </button>
-
-          <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'entregue'})}
-            className={`p-2 rounded-xl text-[8px] font-black uppercase ${p.status==='entregue'?'bg-green-600 text-white':'bg-gray-100 text-gray-400 hover:bg-green-50'}`}>
-            Concluído
-          </button>
-        </div>
-
-        {/* TOTAL */}
-        <div className="font-black text-green-600 text-center text-xl pt-2">
-          R$ {p.total?.toFixed(2)}
-        </div>
-
-      </div>
-    ))}
-  </div>
-)}
+                <div className="font-black uppercase text-sm text-gray-900">{p.clientName || 'Cliente sem nome'}</div>
+                <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2">
+                  <MapPin size={12} className="text-red-500 shrink-0"/> {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num}`}
+                </div>
+                <div className="flex-1 py-2 space-y-3 border-y border-gray-50">
+                  {p.items?.map((it, idx) => (
+                    <div key={idx} className="flex flex-col">
+                      <div className="flex justify-between font-bold text-xs text-gray-800">
+                        <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
+                        <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
+                      </div>
+                      {it.sabores?.map((s, si) => (
+                        <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
+                          + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {/* BOTÕES DE STATUS COM CORES FIXAS */}
+                <div className="grid grid-cols-2 gap-1.5 mt-2">
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
+                  <button onClick={() => updateDoc(doc(db, 'pedidos', p.id), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
+                </div>
+                <div className="font-black text-green-600 text-center text-xl pt-2">R$ {p.total?.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* --- PÁGINA DE SABORES / BEBIDAS / EQUIPE (TABELA UNIFICADA) --- */}
         {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
@@ -329,7 +265,8 @@ export default function App() {
                       {/* INGREDIENTES EM VERMELHO E NEGRITO (SÓ PARA SABORES) */}
                       {aba === 'sabores' && (
                         <p className="text-[11px] text-red-600 font-black italic mt-1 max-w-[350px] leading-tight uppercase">
-                          {it.desc || '⚠️ Sem ingredientes cadastrados.'}
+                          {/* Verifica tanto 'desc' como 'description' para garantir compatibilidade com registos antigos */}
+                          {it.desc || it.description || '⚠️ Sem ingredientes cadastrados.'}
                         </p>
                       )}
                     </div>
@@ -348,7 +285,7 @@ export default function App() {
                   </td>
                   <td className="p-6 text-right space-x-2">
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
-                    <button onClick={async () => { if (window.confirm('Eliminar permanentemente?')) await deleteDoc(doc(db, col, it.id)) }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
+                    <button onClick={async () => { if (window.confirm('Eliminar permanentemente?')) await deleteDoc(doc(db, aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users', it.id)) }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}</tbody>
@@ -423,7 +360,7 @@ export default function App() {
             )}
             <div className="space-y-4">
               <input placeholder="Nome do Item / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
-              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate, manjericão...)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc} onChange={e => setEdit({ ...edit, desc: e.target.value })} />}
+              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate, manjericão...)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               {aba === 'sabores' && (
                 <div className="grid grid-cols-2 gap-4">
                   {['grande', 'gigante', 'meio_metro'].map(t => (
