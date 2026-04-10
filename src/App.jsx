@@ -217,4 +217,41 @@ export default function Admin() {
              <div className="space-y-4">
                 <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">WhatsApp da Pizzaria</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={cfg.zap} onChange={e=>setCfg({...cfg, zap: e.target.value})}/></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.tempo} onChange={e=>setCfg({...cfg, tempo: e.target.value})} /></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Taxa Entrega</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.taxa} onChange={e=>setCfg({...cfg, taxa: parseFloat(e.target.value)})}/></div>
+                </div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Topo do Cupom</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.cabecalho} onChange={e=>setCfg({...cfg, cabecalho: e.target.value})}/></div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Rodapé do Cupom</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.rodape} onChange={e=>setCfg({...cfg, rodape: e.target.value})}/></div>
+             </div>
+             <button onClick={async ()=>{await setDoc(doc(db,'loja_config','geral'), cfg); alert('Sistema Atualizado!')}} className="w-full bg-black text-white py-6 rounded-3xl font-black uppercase shadow-xl hover:scale-95 transition-all">Salvar Tudo</button>
+          </div>
+        )}
+      </main>
+
+      {edit && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
+          <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <h2 className="text-2xl font-black uppercase italic border-b pb-6 flex justify-between items-center">Editar {aba} <button type="button" onClick={()=>setEdit(null)}><X size={30}/></button></h2>
+            {['sabores','bebidas','banners'].includes(aba) && (
+              <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
+                 <img src={edit.img || edit.imageUrl || cfg.logo} className="w-32 h-32 rounded-[30px] object-cover shadow-xl border-4 border-white" />
+                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2">
+                   <Upload size={16}/> {upL ? 'Enviando...' : 'Carregar Imagem'}
+                   <input type="file" className="hidden" onChange={async e => await handleUp(e.target.files[0], (url)=>setEdit({...edit, [aba==='banners'?'imageUrl':'img']: url}))} />
+                 </label>
+              </div>
+            )}
+            <div className="space-y-4">
+              <input placeholder="Nome" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
+              {aba==='equipe' && <input placeholder="E-mail Gmail" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.email} onChange={e=>setEdit({...edit, email: e.target.value})} required />}
+              {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, molho, manjericão)" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
+              {aba==='sabores' && <div className="grid grid-cols-2 gap-4">{['grande','gigante','meio_metro'].map(t=>(<div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={edit.prices?.[t]||0} onChange={e=>setEdit({...edit, prices: {...edit.prices, [t]: parseFloat(e.target.value)}})}/></div>))}</div>}
+              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
+            </div>
+            <button type="submit" disabled={upL} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50">Gravar Dados</button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
