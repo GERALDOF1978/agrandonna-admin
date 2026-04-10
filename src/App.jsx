@@ -119,7 +119,7 @@ export default function Admin() {
         </header>
 
         {aba === 'pedidos' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="bg-[#f5f5dc] grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {peds.map(p => (
               <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status==='pendente'?'border-red-600 animate-pulse':'border-transparent'}`}>
                 <div className="flex justify-between border-b pb-3">
