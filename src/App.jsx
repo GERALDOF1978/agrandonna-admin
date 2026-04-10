@@ -16,7 +16,6 @@ const config = {
 const app = initializeApp(config); const db = getFirestore(app); const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const IMGBB_KEY = "00f5e74d2657312c5173d6aa4018c614";
-const SENHA_MASTER = "GRAN2026";
 const OWNER = "geraldof1978@gmail.com";
 
 export default function Admin() {
@@ -66,11 +65,8 @@ export default function Admin() {
 
   const handleUp = async (file, cb) => {
     setUpL(true); const fd = new FormData(); fd.append('image', file);
-    try {
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
-      const d = await res.json(); cb(d.data.url);
-    } catch(e) { alert("Erro no upload"); }
-    setUpL(false);
+    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
+    const d = await res.json(); cb(d.data.url); setUpL(false);
   };
 
   const salvar = async (e) => {
@@ -96,7 +92,7 @@ export default function Admin() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-30">
         <div className="flex items-center gap-3 border-b border-gray-800 pb-4 mb-2">
           <img src={cfg.logo} className="w-10 h-10 rounded-full border border-yellow-500 object-cover"/>
-          <p className="font-black text-yellow-500 text-[10px] uppercase">Painel Admin</p>
+          <p className="font-black text-yellow-500 text-[10px] uppercase">A Grandonna Admin</p>
         </div>
         <nav className="space-y-1 flex-1">
           {['pedidos','sabores','bebidas','banners','caixa','equipe','sistema'].map(m => (
@@ -109,17 +105,17 @@ export default function Admin() {
         <button onClick={()=>signOut(auth)} className="mt-auto text-gray-600 font-bold text-[10px] uppercase flex items-center gap-2 hover:text-red-500"><LogOut size={14}/> Sair</button>
       </aside>
 
-      <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-500 ${aba === 'pedidos' ? 'bg-gray-200' : 'bg-gray-50'}`}>
+      <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-500 ${aba === 'pedidos' ? 'bg-gray-300' : 'bg-gray-50'}`}>
         <header className="flex justify-between items-center mb-10">
           <h1 className="text-3xl font-black text-black uppercase italic">{aba}</h1>
           {['sabores','bebidas','banners','equipe'].includes(aba) && <button onClick={()=>{
-              if(aba==='equipe' && !masterOk) { const p = prompt("Senha Master:"); if(p===SENHA_MASTER) setMasterOk(true); else return; }
+              if(aba==='equipe' && !masterOk) { const p = prompt("Senha Master:"); if(p==='GRAN2026') setMasterOk(true); else return; }
               setEdit(aba==='sabores'?{name:'',desc:'',prices:{grande:0,gigante:0,meio_metro:0},img:''} : aba==='equipe'?{nome:'',email:''} : aba==='bebidas'?{name:'',price:0,img:''} : {title:'',imageUrl:''});
           }} className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl">Novo {aba}</button>}
         </header>
 
         {aba === 'pedidos' && (
-          <div className="bg-[#f5f5dc] grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {peds.map(p => (
               <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status==='pendente'?'border-red-600 animate-pulse':'border-transparent'}`}>
                 <div className="flex justify-between border-b pb-3">
@@ -129,10 +125,10 @@ export default function Admin() {
                     <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={16}/></button>
                   </div>
                 </div>
-                <div className="font-black uppercase text-sm flex items-center gap-2"><User size={16} className="text-red-600"/> {p.clientName}</div>
+                <div className="font-black uppercase text-sm flex items-center gap-2 text-gray-900"><User size={16} className="text-red-600"/> {p.clientName}</div>
                 <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100"><MapPin size={12} className="inline mr-1 text-red-500"/> {p.entrega==='retirada'?'BALCÃO':`${p.end?.rua}, ${p.end?.num}`}</div>
                 
-                <div className="flex-1 py-2 space-y-3 border-y border-gray-50">
+                <div className="flex-1 py-2 space-y-3 border-y border-gray-100">
                    {p.items?.map((it,idx)=>(
                      <div key={idx} className="flex flex-col gap-1">
                         <div className="flex justify-between font-bold text-xs">
@@ -140,17 +136,20 @@ export default function Admin() {
                           <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
                         </div>
                         {it.sabores?.map(s => (
-                          <p key={s.id} className="text-[9px] text-gray-400 leading-none italic font-medium">+ {s.name}: <span className="font-normal text-gray-500">{s.desc || s.description || 'Sem detalhes'}</span></p>
+                          <div key={s.id} className="bg-gray-50/50 p-1 rounded">
+                            <p className="text-[9px] text-red-600 uppercase font-black tracking-tight">{s.name}</p>
+                            <p className="text-[8px] text-gray-500 italic leading-none">{s.desc || 'Sem ingredientes'}</p>
+                          </div>
                         ))}
                      </div>
                    ))}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})} className={`p-2 rounded-xl text-[8px] font-black uppercase shadow-sm ${p.status==='pendente'?'bg-red-600 text-white':'bg-gray-100 text-gray-400 hover:bg-red-50'}`}>Pendente</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'preparando'})} className={`p-2 rounded-xl text-[8px] font-black uppercase shadow-sm ${p.status==='preparando'?'bg-yellow-500 text-white':'bg-gray-100 text-gray-400 hover:bg-yellow-50'}`}>Cozinha</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'saiu_entrega'})} className={`p-2 rounded-xl text-[8px] font-black uppercase shadow-sm ${p.status==='saiu_entrega'?'bg-blue-600 text-white':'bg-gray-100 text-gray-400 hover:bg-blue-50'}`}>Entrega</button>
-                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'entregue'})} className={`p-2 rounded-xl text-[8px] font-black uppercase shadow-sm ${p.status==='entregue'?'bg-green-600 text-white':'bg-gray-100 text-gray-400 hover:bg-green-50'}`}>Concluído</button>
+                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'pendente'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='pendente'?'bg-red-600 text-white shadow-red-200':'bg-gray-100 text-gray-400'}`}>Pendente</button>
+                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'preparando'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='preparando'?'bg-yellow-500 text-white shadow-yellow-100':'bg-gray-100 text-gray-400'}`}>Cozinha</button>
+                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'saiu_entrega'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='saiu_entrega'?'bg-blue-600 text-white shadow-blue-100':'bg-gray-100 text-gray-400'}`}>Entrega</button>
+                  <button onClick={()=>updateDoc(doc(db,'pedidos',p.id),{status:'entregue'})} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-sm ${p.status==='entregue'?'bg-green-600 text-white shadow-green-100':'bg-gray-100 text-gray-400'}`}>Concluído</button>
                 </div>
                 <div className="font-black text-green-600 text-center text-xl pt-3 border-t">R$ {p.total?.toFixed(2)}</div>
               </div>
@@ -164,14 +163,8 @@ export default function Admin() {
               <Search size={20} className="text-gray-400"/><input type="date" className="bg-transparent font-black outline-none w-full" value={dataFiltro} onChange={e=>setDataFiltro(e.target.value)} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center border-green-100"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Total do Dia</p><p className="text-4xl font-black text-green-600 tracking-tighter">R$ {statsCaixa.total.toFixed(2)}</p></div>
-              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Pedidos Finalizados</p><p className="text-4xl font-black">{statsCaixa.qtd}</p></div>
-            </div>
-            <div className="bg-white p-8 rounded-[40px] border space-y-4 shadow-sm">
-              <h3 className="font-black uppercase text-xs text-gray-400 border-b pb-4">Itens Mais Vendidos</h3>
-              {statsCaixa.detalhes.map(([nome, qtd]) => (
-                <div key={nome} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2"><span>{nome}</span><span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs">{qtd}x</span></div>
-              ))}
+              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center border-green-100"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Total do Dia</p><p className="text-4xl font-black text-green-600">R$ {statsCaixa.total.toFixed(2)}</p></div>
+              <div className="bg-white p-8 rounded-[40px] shadow-sm border text-center"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Finalizados</p><p className="text-4xl font-black">{statsCaixa.qtd}</p></div>
             </div>
           </div>
         )}
@@ -179,22 +172,34 @@ export default function Admin() {
         {['sabores','bebidas','banners','equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
             <table className="w-full text-left">
-              <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase"><tr><th className="p-6">Item / Detalhes</th><th className="p-6">Valores / Email</th><th className="p-6 text-right">Ações</th></tr></thead>
+              <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
+                <tr>
+                  <th className="p-6">Item / Ingredientes</th>
+                  <th className="p-6">Valores Cadastrados</th>
+                  <th className="p-6 text-right">Ações</th>
+                </tr>
+              </thead>
               <tbody>{(aba==='sabores'?sabs:aba==='bebidas'?bebs:aba==='banners'?bans:equipe).map(it => (
-                <tr key={it.id} className="border-b hover:bg-gray-50 transition-all">
+                <tr key={it.id} className="border-b border-gray-50 hover:bg-gray-50 transition-all">
                   <td className="p-6 flex items-center gap-4">
-                    {(it.img || it.imageUrl) && <img src={it.img || it.imageUrl} className="w-12 h-12 rounded-2xl object-cover shadow-md"/>}
+                    {(it.img || it.imageUrl) && <img src={it.img || it.imageUrl} className="w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white"/>}
                     <div>
-                      <p className="font-black uppercase text-xs tracking-tighter">{it.name||it.title||it.nome}</p>
-                      <p className="text-[10px] text-gray-400 font-medium italic leading-none mt-1 max-w-[200px]">{it.desc || it.email || 'Nenhuma descrição'}</p>
+                      <p className="font-black uppercase text-xs tracking-tighter text-gray-900">{it.name||it.title||it.nome}</p>
+                      <p className="text-[10px] text-red-600 font-bold italic leading-tight mt-1 max-w-[250px]">{it.desc || it.email || 'Nenhuma descrição / Clique em editar'}</p>
                     </div>
                   </td>
-                  <td className="p-6 font-bold text-gray-500 text-xs">
-                    {it.price ? `R$ ${it.price.toFixed(2)}` : it.prices ? `G: ${it.prices.grande}` : it.email || '-'}
+                  <td className="p-6 font-bold text-[10px] text-gray-500 uppercase">
+                    {it.price ? `Preço: R$ ${it.price.toFixed(2)}` : it.prices ? (
+                      <div className="space-y-1">
+                        <p className="bg-gray-100 px-2 py-0.5 rounded inline-block mr-1">G: R$ {it.prices.grande}</p>
+                        <p className="bg-gray-100 px-2 py-0.5 rounded inline-block mr-1">GG: R$ {it.prices.gigante}</p>
+                        <p className="bg-gray-100 px-2 py-0.5 rounded inline-block">1/2M: R$ {it.prices.meio_metro}</p>
+                      </div>
+                    ) : it.email || '-'}
                   </td>
                   <td className="p-6 text-right">
-                    <button onClick={()=>{if(aba==='equipe'&&!masterOk){const p=prompt("Senha Master:");if(p===SENHA_MASTER)setMasterOk(true);else return;} setEdit(it)}} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl mr-2"><Edit2 size={16}/></button>
-                    <button onClick={async ()=>{if(window.confirm('Excluir?')) await deleteDoc(doc(db, aba==='sabores'?'menu_sabores':aba==='bebidas'?'menu_bebidas':aba==='banners'?'menu_banners':'admin_users', it.id))}} className="p-2 text-red-600 hover:bg-red-50 rounded-xl"><Trash2 size={16}/></button>
+                    <button onClick={()=>setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={18}/></button>
+                    <button onClick={async ()=>{if(window.confirm('Excluir permanentemente?')) await deleteDoc(doc(db, aba==='sabores'?'menu_sabores':aba==='bebidas'?'menu_bebidas':aba==='banners'?'menu_banners':'admin_users', it.id))}} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={18}/></button>
                   </td>
                 </tr>
               ))}</tbody>
@@ -206,22 +211,24 @@ export default function Admin() {
           <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border space-y-8 mx-auto">
              <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
                 <img src={cfg.logo} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
-                <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2 hover:bg-red-600 transition-all">
+                <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2 hover:bg-red-600 transition-all shadow-lg">
                   <Upload size={14}/> {upL ? 'Enviando...' : 'Trocar Logo'}
-                  <input type="file" className="hidden" onChange={async e => await handleUp(e.target.files[0], (url)=>setCfg({...cfg, logo: url}))} />
+                  <input type="file" className="hidden" onChange={async e => {
+                    setUpL(true); const fd = new FormData(); fd.append('image', e.target.files[0]);
+                    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
+                    const d = await res.json(); setCfg({...cfg, logo: d.data.url}); setUpL(false);
+                  }} />
                 </label>
              </div>
-             <button onClick={()=>setCfg({...cfg, aberto: !cfg.aberto})} className={`w-full p-6 rounded-3xl font-black uppercase flex items-center justify-center gap-3 transition-all ${cfg.aberto?'bg-green-600 text-white shadow-lg':'bg-red-600 text-white shadow-lg'}`}>
+             <button onClick={()=>setCfg({...cfg, aberto: !cfg.aberto})} className={`w-full p-6 rounded-3xl font-black uppercase flex items-center justify-center gap-3 transition-all ${cfg.aberto?'bg-green-600 text-white shadow-lg shadow-green-200':'bg-red-600 text-white shadow-lg shadow-red-200'}`}>
                 <Power size={22}/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
              <div className="space-y-4">
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">WhatsApp da Pizzaria</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={cfg.zap} onChange={e=>setCfg({...cfg, zap: e.target.value})}/></div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e=>setCfg({...cfg, zap: e.target.value})}/></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.tempo} onChange={e=>setCfg({...cfg, tempo: e.target.value})} /></div>
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Taxa Entrega</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.taxa} onChange={e=>setCfg({...cfg, taxa: parseFloat(e.target.value)})}/></div>
                 </div>
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Topo do Cupom</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.cabecalho} onChange={e=>setCfg({...cfg, cabecalho: e.target.value})}/></div>
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-3">Rodapé do Cupom</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={cfg.rodape} onChange={e=>setCfg({...cfg, rodape: e.target.value})}/></div>
              </div>
              <button onClick={async ()=>{await setDoc(doc(db,'loja_config','geral'), cfg); alert('Sistema Atualizado!')}} className="w-full bg-black text-white py-6 rounded-3xl font-black uppercase shadow-xl hover:scale-95 transition-all">Salvar Tudo</button>
           </div>
@@ -231,24 +238,27 @@ export default function Admin() {
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-            <h2 className="text-2xl font-black uppercase italic border-b pb-6 flex justify-between items-center">Editar {aba} <button type="button" onClick={()=>setEdit(null)}><X size={30}/></button></h2>
+            <h2 className="text-2xl font-black uppercase italic border-b pb-6 flex justify-between items-center text-gray-800 tracking-tighter">Editar {aba} <button type="button" onClick={()=>setEdit(null)}><X size={30} className="text-gray-300"/></button></h2>
             {['sabores','bebidas','banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-6 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
                  <img src={edit.img || edit.imageUrl || cfg.logo} className="w-32 h-32 rounded-[30px] object-cover shadow-xl border-4 border-white" />
-                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2">
-                   <Upload size={16}/> {upL ? 'Enviando...' : 'Carregar Imagem'}
-                   <input type="file" className="hidden" onChange={async e => await handleUp(e.target.files[0], (url)=>setEdit({...edit, [aba==='banners'?'imageUrl':'img']: url}))} />
+                 <label className="bg-black text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase cursor-pointer flex items-center gap-2">
+                   <Upload size={16}/> {upL ? 'Subindo...' : 'Carregar Foto'}
+                   <input type="file" className="hidden" onChange={async e => {
+                     setUpL(true); const fd = new FormData(); fd.append('image', e.target.files[0]);
+                     const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
+                     const d = await res.json(); setEdit({...edit, [aba==='banners'?'imageUrl':'img']: d.data.url}); setUpL(false);
+                   }} />
                  </label>
               </div>
             )}
             <div className="space-y-4">
-              <input placeholder="Nome" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
-              {aba==='equipe' && <input placeholder="E-mail Gmail" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.email} onChange={e=>setEdit({...edit, email: e.target.value})} required />}
-              {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, molho, manjericão)" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
+              <input placeholder="Nome do Item" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold outline-none focus:border-red-500" value={edit.name||edit.title||edit.nome} onChange={e=>setEdit({...edit, [aba==='banners'?'title':aba==='equipe'?'nome':'name']: e.target.value})} required />
+              {aba==='sabores' && <textarea placeholder="Ingredientes (Ex: Mussarela, presunto, ovo, cebola...)" className="w-full h-32 p-5 bg-gray-50 border rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc} onChange={e=>setEdit({...edit, desc: e.target.value})} />}
               {aba==='sabores' && <div className="grid grid-cols-2 gap-4">{['grande','gigante','meio_metro'].map(t=>(<div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={edit.prices?.[t]||0} onChange={e=>setEdit({...edit, prices: {...edit.prices, [t]: parseFloat(e.target.value)}})}/></div>))}</div>}
-              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
+              {aba==='bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold" value={edit.price} onChange={e=>setEdit({...edit, price: parseFloat(e.target.value)})}/>}
             </div>
-            <button type="submit" disabled={upL} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50">Gravar Dados</button>
+            <button type="submit" disabled={upL} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 transition-all disabled:opacity-50">Gravar Alterações</button>
           </form>
         </div>
       )}
