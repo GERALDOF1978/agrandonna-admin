@@ -216,18 +216,32 @@ export default function App() {
                   <MapPin size={12} className="text-red-500 shrink-0"/> {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num}`}
                 </div>
                 <div className="flex-1 py-2 space-y-3 border-y border-gray-50">
-                  {p.items?.map((it, idx) => (
-                    <div key={idx} className="flex flex-col">
-                      <div className="flex justify-between font-bold text-xs text-gray-800">
-                        <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                        <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
-                      </div>
-                      {it.sabores?.map((s, si) => (
-                        <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
-                          + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
-                        </p>
-                      ))}
-                    </div>
+{p.items?.map((it,idx)=>(
+  <div key={idx} className="flex flex-col">
+    
+    {/* NOME + PREÇO */}
+    <div className="flex justify-between font-bold text-xs text-gray-800">
+      <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
+      <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
+    </div>
+
+    {/* SABORES + INGREDIENTES */}
+    {it.sabores?.map(s=>(
+      <div key={s.id} className="mt-1">
+        {/* Nome do sabor */}
+        <p className="text-[10px] text-red-600 font-black uppercase">
+          + {s.name}
+        </p>
+
+        {/* INGREDIENTES (AGORA EMBAIXO) */}
+        <p className="text-[9px] text-gray-500 italic leading-tight ml-2">
+          {s.desc || 'Sem ingredientes'}
+        </p>
+      </div>
+    ))}
+
+  </div>
+))}
                   ))}
                 </div>
                 {/* BOTÕES DE STATUS COM CORES FIXAS */}
