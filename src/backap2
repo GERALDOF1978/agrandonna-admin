@@ -42,10 +42,15 @@ export default function App() {
   const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
   
+  // ATUALIZADO: Agora temos os preços das promoções gravados na configuração geral
   const [cfg, setCfg] = useState({ 
     tempo: 40, taxaMinima: 6, kmIncluso: 3, valorKm: 1, cepLoja: '13500000', horaAbre: '18:00',
     aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA',
-    splashAtivo: false, splashImg: '', promoGrande: true, promoGigante: true, promoMeioMetro: true, promoUmMetro: true
+    splashAtivo: false, splashImg: '', 
+    promoGrande: true, precoPromoGrande: 47.90,
+    promoGigante: true, precoPromoGigante: 72.99,
+    promoMeioMetro: true, precoPromoMeioMetro: 52.90,
+    promoUmMetro: true, precoPromoUmMetro: 79.90
   });
 
   const [chatAberto, setChatAberto] = useState(null);
@@ -103,9 +108,13 @@ export default function App() {
           cepLoja: data.cepLoja ?? '13500000',
           horaAbre: data.horaAbre ?? '18:00',
           promoGrande: data.promoGrande ?? true,
+          precoPromoGrande: data.precoPromoGrande ?? 47.90,
           promoGigante: data.promoGigante ?? true,
+          precoPromoGigante: data.precoPromoGigante ?? 72.99,
           promoMeioMetro: data.promoMeioMetro ?? true,
-          promoUmMetro: data.promoUmMetro ?? true
+          precoPromoMeioMetro: data.precoPromoMeioMetro ?? 52.90,
+          promoUmMetro: data.promoUmMetro ?? true,
+          precoPromoUmMetro: data.precoPromoUmMetro ?? 79.90
         });
       }
     });
@@ -147,41 +156,23 @@ export default function App() {
     setAdminMsg('');
   };
 
-  // FUNÇÃO DO BOTÃO MÁGICO
   const arrumarBancoDeDados = async () => {
-    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços de R$34 no Broto e R$79,90 no 1 Metro para as salgadas. Quer continuar?")) return;
-    
+    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços base no Broto e 1 Metro para as salgadas. Quer continuar?")) return;
     setLoadingMagic(true);
     let atualizadas = 0;
-    
-    // Palavras-chave que indicam que a pizza é doce
     const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
-
     for (const sabor of sabores) {
       const nomeSabor = sabor.name.toLowerCase();
-      // Tenta adivinhar se é doce
       const isDoce = sabor.isDoce || docesNomes.some(palavra => nomeSabor.includes(palavra));
-      
       const precos = { ...sabor.prices };
-      
-      if (isDoce) {
-        // Pizza Doce (Zera os que não existem para não aparecer pro cliente)
-        precos.broto = 0;
-        precos.gigante = 0;
-        precos.um_metro = 0;
-      } else {
-        // Pizza Salgada (Coloca os preços se não tiver)
+      if (isDoce) { precos.broto = 0; precos.gigante = 0; precos.um_metro = 0; } 
+      else {
         if (!precos.broto || precos.broto === 0) precos.broto = 34.00;
         if (!precos.um_metro || precos.um_metro === 0) precos.um_metro = 79.90;
       }
-      
-      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), {
-        prices: precos,
-        isDoce: isDoce
-      });
+      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce });
       atualizadas++;
     }
-    
     setLoadingMagic(false);
     alert(`Mágica Feita! ${atualizadas} pizzas foram ajustadas.`);
   };
@@ -291,70 +282,34 @@ export default function App() {
     return (
       <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
         {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
-        
         <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
-          <div>
-            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span>
-            <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-          </div>
+          <div><span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span><span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
           <div className="flex gap-2">
-            {p.status !== 'pendente' && (
-              <button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido">
-                <Printer size={14}/>
-              </button>
-            )}
+            {p.status !== 'pendente' && (<button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido"><Printer size={14}/></button>)}
             <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
-            <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
-              className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat">
-              <MessageCircle size={14}/>
-              {temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}
-            </button>
+            <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat"><MessageCircle size={14}/>{temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}</button>
           </div>
         </div>
-        
-        <div className="relative z-10">
-          <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div>
-          <div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div>
-        </div>
-
+        <div className="relative z-10"><div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div><div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div></div>
         <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
-          <div>
-            {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
-            {p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {p.end.taxaCobrada?.toFixed(2)}</span>}
-          </div>
+          <div>{p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}{p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {p.end.taxaCobrada?.toFixed(2)}</span>}</div>
         </div>
-        
         <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
           {p.items?.map((it, idx) => (
             <div key={idx} className="flex flex-col">
-              <div className="flex justify-between font-bold text-xs text-gray-800">
-                <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
-              </div>
-              {it.sabores?.map((s, si) => (
-                <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
-                  + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
-                </p>
-              ))}
+              <div className="flex justify-between font-bold text-xs text-gray-800"><span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span><span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span></div>
+              {it.sabores?.map((s, si) => <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">+ {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span></p>)}
             </div>
           ))}
         </div>
-
-        <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10">
-          <span className="text-[9px] font-black uppercase text-gray-500">
-            Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
-            {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
-          </span>
-        </div>
-        
+        <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10"><span className="text-[9px] font-black uppercase text-gray-500">Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>{p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}</span></div>
         <div className="grid grid-cols-2 gap-1.5 mt-1 relative z-10">
           <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
           <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
           <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
           <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
         </div>
-        
         <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {p.total?.toFixed(2)}</div>
       </div>
     );
@@ -365,9 +320,7 @@ export default function App() {
       <div className="bg-gray-900 p-8 rounded-[40px] border border-gray-800 shadow-2xl">
         <img src={cfg.logo} className="w-24 h-24 rounded-full mx-auto border-2 border-yellow-500 mb-6 object-cover shadow-lg"/>
         <h1 className="text-white font-black italic mb-6 uppercase tracking-widest text-xl">A Grandonna Admin</h1>
-        <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-xl active:scale-95">
-          <img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar com Google
-        </button>
+        <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-xl active:scale-95"><img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar com Google</button>
       </div>
     </div>
   );
@@ -390,11 +343,7 @@ export default function App() {
                 {m === 'sistema' && <Settings size={16}/>}
                 {m}
               </div>
-              {m === 'pedidos' && pedidos.filter(p => p.status === 'pendente').length > 0 && (
-                <span className="bg-white text-red-600 px-2 rounded-full animate-bounce font-bold">
-                  {pedidos.filter(p => p.status === 'pendente').length}
-                </span>
-              )}
+              {m === 'pedidos' && pedidos.filter(p => p.status === 'pendente').length > 0 && <span className="bg-white text-red-600 px-2 rounded-full animate-bounce font-bold">{pedidos.filter(p => p.status === 'pendente').length}</span>}
             </button>
           ))}
         </nav>
@@ -422,12 +371,8 @@ export default function App() {
 
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {pedidos
-              .filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr())
-              .map(renderPedidoCard)}
-            {pedidos.filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()).length === 0 && (
-              <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido no momento.</p>
-            )}
+            {pedidos.filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()).map(renderPedidoCard)}
+            {pedidos.filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()).length === 0 && <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido no momento.</p>}
           </div>
         )}
 
@@ -439,9 +384,7 @@ export default function App() {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).map(renderPedidoCard)}
-              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).length === 0 && (
-                <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido encontrado nesta data.</p>
-              )}
+              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).length === 0 && <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido encontrado nesta data.</p>}
             </div>
           </div>
         )}
@@ -456,46 +399,20 @@ export default function App() {
                 <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
                     <div className="relative shrink-0">
-                      {(it.img || it.imageUrl) ? (
-                        <img src={it.img || it.imageUrl} className={`w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white ${it.isActive === false ? 'grayscale opacity-50' : ''}`}/>
-                      ) : (
-                        <div className={`w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-white ${it.isActive === false ? 'text-red-300' : 'text-gray-300'}`}>
-                          {aba === 'sabores' ? <Pizza size={24}/> : aba === 'bebidas' ? <CupSoda size={24}/> : <User size={24}/>}
-                        </div>
-                      )}
+                      {(it.img || it.imageUrl) ? <img src={it.img || it.imageUrl} className={`w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white ${it.isActive === false ? 'grayscale opacity-50' : ''}`}/> : <div className={`w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-white ${it.isActive === false ? 'text-red-300' : 'text-gray-300'}`}>{aba === 'sabores' ? <Pizza size={24}/> : aba === 'bebidas' ? <CupSoda size={24}/> : <User size={24}/>}</div>}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className={`font-black uppercase text-xs tracking-tighter ${it.isActive === false ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {it.name || it.title || it.nome}
-                        </p>
-                        
-                        {aba === 'sabores' && it.isPromo && (
-                          <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 border border-red-200">
-                            <Flame size={10}/> Promo
-                          </span>
-                        )}
-                        {aba === 'sabores' && it.isDoce && (
-                          <span className="bg-pink-100 text-pink-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-pink-200">
-                            🍬 Doce
-                          </span>
-                        )}
-
-                        {['sabores', 'bebidas'].includes(aba) && it.isActive === false && (
-                          <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
-                        )}
+                        <p className={`font-black uppercase text-xs tracking-tighter ${it.isActive === false ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{it.name || it.title || it.nome}</p>
+                        {aba === 'sabores' && it.isPromo && <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 border border-red-200"><Flame size={10}/> Promo</span>}
+                        {aba === 'sabores' && it.isDoce && <span className="bg-pink-100 text-pink-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-pink-200">🍬 Doce</span>}
+                        {['sabores', 'bebidas'].includes(aba) && it.isActive === false && <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>}
                       </div>
-                      
-                      {aba === 'sabores' && (
-                        <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>
-                          {it.desc || it.description || '⚠️ Sem ingredientes.'}
-                        </p>
-                      )}
+                      {aba === 'sabores' && <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>{it.desc || it.description || '⚠️ Sem ingredientes.'}</p>}
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
                     {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {it.price.toFixed(2)}</span>}
-                    
                     {aba === 'sabores' && it.prices && (
                       <div className="flex flex-wrap gap-1 max-w-[250px]">
                         {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {it.prices.broto}</span>}
@@ -509,18 +426,9 @@ export default function App() {
                     {aba === 'banners' && <span className="text-[8px] text-gray-300 truncate max-w-[150px] block">{it.imageUrl}</span>}
                   </td>
                   <td className="p-6 text-right space-x-2 whitespace-nowrap">
-                    {['sabores', 'bebidas'].includes(aba) && (
-                      <button onClick={() => toggleActive(it)} className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}>
-                        {it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}
-                      </button>
-                    )}
+                    {['sabores', 'bebidas'].includes(aba) && <button onClick={() => toggleActive(it)} className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}>{it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}</button>}
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
-                    <button onClick={async () => { 
-                      if (window.confirm('Eliminar permanentemente?')) {
-                        const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
-                        await deleteDoc(doc(db, colName, String(it.id)));
-                      }
-                    }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
+                    <button onClick={async () => { if (window.confirm('Eliminar permanentemente?')) { const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users'; await deleteDoc(doc(db, colName, String(it.id))); } }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               ))}</tbody>
@@ -542,10 +450,7 @@ export default function App() {
             <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
               <h3 className="font-black uppercase text-xs text-gray-400 border-b border-gray-50 pb-4">Ranking de Vendas</h3>
               {stats.itens.map(([n, q]) => (
-                <div key={n} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2">
-                  <span className="text-gray-800 uppercase text-xs">{n}</span>
-                  <span className="bg-red-50 text-red-600 px-4 py-1 rounded-full text-xs font-black">{q}x</span>
-                </div>
+                <div key={n} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2"><span className="text-gray-800 uppercase text-xs">{n}</span><span className="bg-red-50 text-red-600 px-4 py-1 rounded-full text-xs font-black">{q}x</span></div>
               ))}
               {stats.itens.length === 0 && <p className="text-center py-10 text-gray-300 font-bold uppercase">Nenhuma venda.</p>}
             </div>
@@ -566,7 +471,6 @@ export default function App() {
                <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
 
-             {/* BOTÃO MÁGICO PARA CONSERTAR O CARDÁPIO AUTOMATICAMENTE */}
              <div className="space-y-4 pt-4 border-t border-gray-100 bg-red-50 p-6 rounded-3xl border border-red-100">
                 <h3 className="font-black text-xs text-red-600 uppercase text-center mb-2 flex justify-center items-center gap-1"><Wand2 size={14}/> Assistente Mágico</h3>
                 <p className="text-[10px] text-red-500 font-bold text-center mb-4">Clique aqui uma vez para o sistema corrigir todas as Pizzas Doces e colocar os preços que faltam (Broto R$34 / 1 Metro R$79,90) nas Salgadas.</p>
@@ -577,18 +481,13 @@ export default function App() {
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-purple-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><ImgIcon size={14}/> Splash Screen (Tela de Aviso)</h3>
-                {cfg.splashImg && (
-                  <div className="flex justify-center"><img src={cfg.splashImg} className="w-full max-w-[200px] h-auto rounded-2xl shadow-md border border-gray-200" /></div>
-                )}
+                {cfg.splashImg && <div className="flex justify-center"><img src={cfg.splashImg} className="w-full max-w-[200px] h-auto rounded-2xl shadow-md border border-gray-200" /></div>}
                 <div className="flex items-center gap-4 justify-between bg-gray-50 p-4 rounded-3xl border border-gray-100">
                   <label className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer hover:bg-purple-600 transition-all uppercase flex items-center gap-2">
                     <Upload size={12}/> Foto do Aviso
                     <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, splashImg: url }))} />
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg.splashAtivo} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} />
-                    <span className="font-bold text-xs uppercase text-purple-600">Ativar Splash</span>
-                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg.splashAtivo} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} /><span className="font-bold text-xs uppercase text-purple-600">Ativar Splash</span></label>
                 </div>
              </div>
 
@@ -607,26 +506,59 @@ export default function App() {
                 <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP Base da Loja (Saída)</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.cepLoja} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.taxaMinima} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso (Mínima)</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor / KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
                 </div>
              </div>
 
+             {/* BLOCO DE CARDS DE PROMOÇÃO ATUALIZADO (COM PREÇOS) */}
              <div className="space-y-4 pt-4 border-t border-gray-100">
-                <h3 className="font-black text-xs text-orange-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><Flame size={14}/> Exibir Cards de Promoção Fixo no App</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
-                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGrande} onChange={e => setCfg({ ...cfg, promoGrande: e.target.checked })} /> <span className="font-bold text-xs uppercase">Grande</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
-                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGigante} onChange={e => setCfg({ ...cfg, promoGigante: e.target.checked })} /> <span className="font-bold text-xs uppercase">Gigante</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
-                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoMeioMetro} onChange={e => setCfg({ ...cfg, promoMeioMetro: e.target.checked })} /> <span className="font-bold text-xs uppercase">1/2 Metro</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
-                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoUmMetro} onChange={e => setCfg({ ...cfg, promoUmMetro: e.target.checked })} /> <span className="font-bold text-xs uppercase">1 Metro</span>
-                  </label>
+                <h3 className="font-black text-xs text-orange-500 uppercase text-center mb-4 flex justify-center items-center gap-1"><Flame size={14}/> Configurar Cards de Promoção (App Cliente)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Promo Grande */}
+                  <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <input type="checkbox" className="w-6 h-6 accent-orange-500 rounded" checked={cfg.promoGrande} onChange={e => setCfg({ ...cfg, promoGrande: e.target.checked })} /> 
+                    <div className="flex-1 flex flex-col">
+                      <span className="font-bold text-[10px] uppercase text-gray-500 tracking-widest">Pizza Grande</span>
+                      <div className="flex items-center text-lg font-black text-gray-800">
+                        R$ <input type="number" step="0.01" className="w-full bg-transparent outline-none ml-1 placeholder-gray-300" value={cfg.precoPromoGrande} onChange={e => setCfg({ ...cfg, precoPromoGrande: parseFloat(e.target.value) })} placeholder="47.90" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Promo Gigante */}
+                  <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <input type="checkbox" className="w-6 h-6 accent-orange-500 rounded" checked={cfg.promoGigante} onChange={e => setCfg({ ...cfg, promoGigante: e.target.checked })} /> 
+                    <div className="flex-1 flex flex-col">
+                      <span className="font-bold text-[10px] uppercase text-gray-500 tracking-widest">Pizza Gigante</span>
+                      <div className="flex items-center text-lg font-black text-gray-800">
+                        R$ <input type="number" step="0.01" className="w-full bg-transparent outline-none ml-1 placeholder-gray-300" value={cfg.precoPromoGigante} onChange={e => setCfg({ ...cfg, precoPromoGigante: parseFloat(e.target.value) })} placeholder="72.99" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Promo Meio Metro */}
+                  <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <input type="checkbox" className="w-6 h-6 accent-orange-500 rounded" checked={cfg.promoMeioMetro} onChange={e => setCfg({ ...cfg, promoMeioMetro: e.target.checked })} /> 
+                    <div className="flex-1 flex flex-col">
+                      <span className="font-bold text-[10px] uppercase text-gray-500 tracking-widest">1/2 Metro</span>
+                      <div className="flex items-center text-lg font-black text-gray-800">
+                        R$ <input type="number" step="0.01" className="w-full bg-transparent outline-none ml-1 placeholder-gray-300" value={cfg.precoPromoMeioMetro} onChange={e => setCfg({ ...cfg, precoPromoMeioMetro: parseFloat(e.target.value) })} placeholder="52.90" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Promo Um Metro */}
+                  <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <input type="checkbox" className="w-6 h-6 accent-orange-500 rounded" checked={cfg.promoUmMetro} onChange={e => setCfg({ ...cfg, promoUmMetro: e.target.checked })} /> 
+                    <div className="flex-1 flex flex-col">
+                      <span className="font-bold text-[10px] uppercase text-gray-500 tracking-widest">1 Metro</span>
+                      <div className="flex items-center text-lg font-black text-gray-800">
+                        R$ <input type="number" step="0.01" className="w-full bg-transparent outline-none ml-1 placeholder-gray-300" value={cfg.precoPromoUmMetro} onChange={e => setCfg({ ...cfg, precoPromoUmMetro: parseFloat(e.target.value) })} placeholder="79.90" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
              </div>
 
