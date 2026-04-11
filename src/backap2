@@ -41,15 +41,24 @@ export default function App() {
   const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
   
-  const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA' });
+  // CONFIGURAÇÕES ATUALIZADAS COM A LÓGICA DE FRETE DINÂMICO
+  const [cfg, setCfg] = useState({ 
+    tempo: 40, 
+    taxaMinima: 6, 
+    kmIncluso: 3,
+    valorKm: 1,
+    cepLoja: '13500000',
+    aberto: true, 
+    zap: '19988723803', 
+    logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', 
+    topo: 'A GRANDONNA' 
+  });
 
   const [chatAberto, setChatAberto] = useState(null);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [adminMsg, setAdminMsg] = useState('');
   const [alertasChat, setAlertasChat] = useState([]); 
   const scrollRef = useRef(null);
-  
-  // Controle sonoro de novos pedidos
   const qtdPendentes = useRef(0);
 
   useEffect(() => {
@@ -75,12 +84,10 @@ export default function App() {
 
     const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      // LÓGICA DE ALERTA SONORO DE NOVO PEDIDO
       const novosPendentes = data.filter(p => p.status === 'pendente').length;
       if (novosPendentes > qtdPendentes.current) {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(e => console.log("Áudio bloqueado até o usuário interagir com a tela."));
+        audio.play().catch(e => console.log("Áudio bloqueado."));
       }
       qtdPendentes.current = novosPendentes;
       setPedidos(data);
@@ -90,7 +97,19 @@ export default function App() {
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => s.exists() && setCfg(s.data()));
+    const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => {
+      if(s.exists()){
+        // Garante que se a config for antiga, ela receba os campos novos
+        const data = s.data();
+        setCfg({
+          ...data,
+          taxaMinima: data.taxaMinima ?? data.taxa ?? 6,
+          kmIncluso: data.kmIncluso ?? 3,
+          valorKm: data.valorKm ?? 1,
+          cepLoja: data.cepLoja ?? '13500000'
+        });
+      }
+    });
 
     return () => { unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
@@ -129,7 +148,6 @@ export default function App() {
     setAdminMsg('');
   };
 
-  // NOVA FUNÇÃO: IMPRESSÃO TÉRMICA DE PEDIDO
   const imprimirPedido = (p) => {
     const janela = window.open('', '', 'width=300,height=600');
     janela.document.write(`
@@ -156,7 +174,11 @@ export default function App() {
           <div class="margin-bot">Tel: ${p.clientPhone}</div>
           <div class="divisor"></div>
           <div class="bold">${p.entrega === 'retirada' ? 'BALCAO / RETIRADA' : 'DELIVERY'}</div>
-          ${p.entrega === 'entrega' ? `<div class="margin-bot">${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}</div>` : ''}
+          ${p.entrega === 'entrega' ? `
+            <div class="margin-bot">${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}</div>
+            ${p.end?.distancia ? `<div>Distancia: ${p.end.distancia} km</div>` : ''}
+            <div>Frete Cobrado: R$ ${p.end?.taxaCobrada?.toFixed(2)}</div>
+          ` : ''}
           <div class="divisor"></div>
           <div class="bold margin-bot">ITENS:</div>
           ${p.items?.map(it => `
@@ -239,7 +261,7 @@ export default function App() {
           </div>
           <div className="flex gap-2">
             
-            {/* NOVO: BOTÃO DE IMPRIMIR - APARECE SÓ SE NÃO FOR PENDENTE */}
+            {/* TRAVA DE IMPRESSÃO: Botão só aparece se o status passou de Pendente */}
             {p.status !== 'pendente' && (
               <button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido">
                 <Printer size={14}/>
@@ -263,7 +285,10 @@ export default function App() {
 
         <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
-          {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
+          <div>
+            {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
+            {p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {p.end.taxaCobrada?.toFixed(2)}</span>}
+          </div>
         </div>
         
         <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
@@ -486,7 +511,7 @@ export default function App() {
         )}
 
         {aba === 'sistema' && (
-          <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
+          <div className="max-w-xl bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
              <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
                 <img src={cfg.logo} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all uppercase flex items-center gap-2">
@@ -494,18 +519,34 @@ export default function App() {
                   <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, logo: url }))} />
                 </label>
              </div>
+             
              <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
                <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
-             <div className="space-y-4 pt-4">
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
+
+             <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Geral</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })}/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Taxa</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.taxa} onChange={e => setCfg({ ...cfg, taxa: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
                 </div>
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Imprimir</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })}/></div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Título da Impressão</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })}/></div>
              </div>
-             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Atualizado!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl hover:scale-95 transition-all">Guardar Configurações</button>
+
+             {/* NOVOS CAMPOS: CÁLCULO DE FRETE DINÂMICO */}
+             <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h3 className="font-black text-xs text-blue-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><MapPin size={14}/> Configuração de Frete por KM</h3>
+                
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP Base da Loja (Saída)</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.cepLoja} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
+                
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.taxaMinima} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso na Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                </div>
+             </div>
+
+             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Sistema Atualizado com Sucesso!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl hover:scale-95 transition-all">Guardar Configurações</button>
           </div>
         )}
       </main>
