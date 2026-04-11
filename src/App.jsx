@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -20,6 +20,12 @@ const provider = new GoogleAuthProvider();
 const IMGBB_KEY = "00f5e74d2657312c5173d6aa4018c614";
 const OWNER_EMAIL = "geraldof1978@gmail.com";
 
+// Função para pegar a data correta no fuso horário local (evita bug de UTC depois das 21h)
+const getDataLocalStr = (timestamp) => {
+  const d = timestamp ? new Date(timestamp) : new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasPerm, setHasPerm] = useState(false);
@@ -32,17 +38,21 @@ export default function App() {
   const [edit, setEdit] = useState(null);
   const [isUp, setIsUp] = useState(false);
   const [isMst, setIsMst] = useState(false);
-  const [filtro, setFiltro] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Datas para Filtros
+  const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
+  const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
+  
   const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA' });
 
   // Estados do Chat
-  const [chatAberto, setChatAberto] = useState(null); // Guarda { userId, clientName }
+  const [chatAberto, setChatAberto] = useState(null);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [adminMsg, setAdminMsg] = useState('');
-  const [alertasChat, setAlertasChat] = useState([]); // Guarda os UIDs de quem mandou msg nova
+  const [alertasChat, setAlertasChat] = useState([]); 
   const scrollRef = useRef(null);
 
-  // 1. Monitorar Autenticação
+  // Monitorar Autenticação
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
       if (u) {
@@ -61,50 +71,33 @@ export default function App() {
     });
   }, []);
 
-  // 2. Carregar Dados do Firebase
+  // Carregar Dados
   useEffect(() => {
     if (!hasPerm) return;
 
     const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => 
       setPedidos(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => 
-      setSabores(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => 
-      setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsubN = onSnapshot(collection(db, 'menu_banners'), s => 
-      setBanners(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsubE = onSnapshot(collection(db, 'admin_users'), s => 
-      setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => 
-      s.exists() && setCfg(s.data())
-    );
+    const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => s.exists() && setCfg(s.data()));
 
     return () => { unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
 
-  // 3. Sistema Inteligente de Alertas de Chat
+  // Alertas de Chat
   useEffect(() => {
     if (!hasPerm || pedidos.length === 0) return;
-    
-    // Pega os IDs únicos de clientes que têm pedidos em andamento
     const ativos = [...new Set(pedidos.filter(p => ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
     
     const unsubs = ativos.map(uid => {
-      // Ouve a última mensagem desse cliente
       return onSnapshot(query(collection(db, 'artifacts', 'grandonna-oficial', 'users', uid, 'chat'), orderBy('timestamp', 'desc')), s => {
         if (!s.empty) {
           const lastMsg = s.docs[0].data();
-          // Se a última mensagem for do cliente, ativa o alerta
-          if (lastMsg.sender === 'user') {
-            setAlertasChat(prev => [...new Set([...prev, uid])]);
-          } else {
-            setAlertasChat(prev => prev.filter(id => id !== uid));
-          }
+          if (lastMsg.sender === 'user') setAlertasChat(prev => [...new Set([...prev, uid])]);
+          else setAlertasChat(prev => prev.filter(id => id !== uid));
         }
       });
     });
@@ -112,7 +105,7 @@ export default function App() {
     return () => unsubs.forEach(u => u());
   }, [pedidos, hasPerm]);
 
-  // 4. Carregar mensagens quando abrir o modal de chat
+  // Carregar janela do chat
   useEffect(() => {
     if (!chatAberto) return;
     const unsub = onSnapshot(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), s => {
@@ -122,7 +115,6 @@ export default function App() {
     return () => unsub();
   }, [chatAberto]);
 
-  // 5. Enviar Mensagem do Admin
   const enviarMsgAdmin = async (e) => {
     e.preventDefault(); if (!adminMsg.trim()) return;
     await addDoc(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), { 
@@ -131,11 +123,8 @@ export default function App() {
     setAdminMsg('');
   };
 
-  // Estatísticas do Caixa
   const stats = useMemo(() => {
-    const pedsDoDia = pedidos.filter(p => 
-      new Date(p.timestamp).toISOString().split('T')[0] === filtro && p.status === 'entregue'
-    );
+    const pedsDoDia = pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroCaixa && p.status === 'entregue');
     const total = pedsDoDia.reduce((a, b) => a + (b.total || 0), 0);
     const contagem = {};
     pedsDoDia.flatMap(p => p.items || []).forEach(i => {
@@ -143,9 +132,8 @@ export default function App() {
       contagem[nome] = (contagem[nome] || 0) + 1;
     });
     return { total, qtd: pedsDoDia.length, itens: Object.entries(contagem) };
-  }, [pedidos, filtro]);
+  }, [pedidos, filtroCaixa]);
 
-  // Upload de Imagem (ImgBB)
   const handleImg = async (file, callback) => {
     setIsUp(true);
     const fd = new FormData(); fd.append('image', file);
@@ -156,16 +144,14 @@ export default function App() {
     setIsUp(false);
   };
 
-  // Guardar Item no Banco
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
     const data = { ...edit }; const id = data.id; delete data.id;
 
     try {
-      if (id) {
-        await setDoc(doc(db, col, String(id)), data, { merge: true });
-      } else {
+      if (id) await setDoc(doc(db, col, String(id)), data, { merge: true });
+      else {
         if (['sabores', 'bebidas'].includes(aba)) data.isActive = true;
         await addDoc(collection(db, col), data);
       }
@@ -177,9 +163,80 @@ export default function App() {
     if (!item || !item.id) return;
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
     const newState = item.isActive === false ? true : false;
-    try {
-      await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true });
-    } catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
+    try { await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); } 
+    catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
+  };
+
+  // Função centralizada para desenhar os Cards de Pedidos (usada na aba Pedidos e Histórico)
+  const renderPedidoCard = (p) => {
+    // Inteligência do Chat: Verifica se é o pedido MAIS NOVO deste cliente
+    const isLatestForUser = pedidos.find(x => x.userId === p.userId)?.id === p.id;
+    // O alerta só aparece se tem mensagem nova E é o card mais recente do cliente
+    const temAlerta = alertasChat.includes(p.userId) && isLatestForUser;
+
+    return (
+      <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
+        {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
+        
+        <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
+          <div>
+            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span>
+            <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
+            
+            <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
+              className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat">
+              <MessageCircle size={14}/>
+              {temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}
+            </button>
+          </div>
+        </div>
+        
+        <div className="relative z-10">
+          <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div>
+          <div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div>
+        </div>
+
+        <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
+          <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
+          {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
+        </div>
+        
+        <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
+          {p.items?.map((it, idx) => (
+            <div key={idx} className="flex flex-col">
+              <div className="flex justify-between font-bold text-xs text-gray-800">
+                <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
+                <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
+              </div>
+              {it.sabores?.map((s, si) => (
+                <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
+                  + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
+                </p>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10">
+          <span className="text-[9px] font-black uppercase text-gray-500">
+            Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
+            {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-1.5 mt-1 relative z-10">
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
+        </div>
+        
+        <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {p.total?.toFixed(2)}</div>
+      </div>
+    );
   };
 
   if (!hasPerm) return (
@@ -196,14 +253,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
-      {/* MENU LATERAL */}
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {['pedidos', 'sabores', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
-            <button key={m} onClick={() => setAba(m)} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
+          {/* Adicionado Historico aqui no Menu e fechando os Modais ao clicar! */}
+          {['pedidos', 'historico', 'sabores', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
+            <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
                 {m === 'pedidos' && <ClipboardList size={16}/>}
+                {m === 'historico' && <History size={16}/>}
                 {m === 'sabores' && <Pizza size={16}/>}
                 {m === 'bebidas' && <CupSoda size={16}/>}
                 {m === 'caixa' && <BarChart3 size={16}/>}
@@ -223,7 +281,7 @@ export default function App() {
         <button onClick={() => signOut(auth)} className="text-gray-500 font-bold text-[10px] uppercase flex items-center gap-2 p-2 hover:text-red-500 transition-colors"><LogOut size={14}/> Sair</button>
       </aside>
 
-      <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${aba === 'pedidos' ? 'bg-gray-300' : 'bg-gray-50'}`}>
+      <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
         <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
           <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
           {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
@@ -242,84 +300,35 @@ export default function App() {
           )}
         </header>
 
-        {/* --- PÁGINA DE PEDIDOS --- */}
+        {/* --- PÁGINA DE PEDIDOS DO DIA --- */}
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {pedidos.map(p => {
-              const temAlerta = alertasChat.includes(p.userId);
-              return (
-                <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
-                  {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
-                  
-                  <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
-                    <div>
-                      <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span>
-                      <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm"><Phone size={14}/></button>
-                      
-                      {/* BOTÃO DO CHAT COM ANIMAÇÃO SE TIVER MENSAGEM */}
-                      <button 
-                        onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
-                        className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`}
-                      >
-                        <MessageCircle size={14}/>
-                        {temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="relative z-10">
-                    <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div>
-                    <div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div>
-                  </div>
-
-                  <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
-                    <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
-                    {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
-                  </div>
-                  
-                  <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
-                    {p.items?.map((it, idx) => (
-                      <div key={idx} className="flex flex-col">
-                        <div className="flex justify-between font-bold text-xs text-gray-800">
-                          <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                          <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
-                        </div>
-                        {it.sabores?.map((s, si) => (
-                          <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
-                            + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
-                          </p>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* INFO DE PAGAMENTO */}
-                  <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10">
-                    <span className="text-[9px] font-black uppercase text-gray-500">
-                      Forma de Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
-                      {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
-                    </span>
-                  </div>
-                  
-                  {/* BOTÕES DE STATUS COM CORES FIXAS */}
-                  <div className="grid grid-cols-2 gap-1.5 mt-1 relative z-10">
-                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
-                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
-                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
-                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
-                  </div>
-                  
-                  <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {p.total?.toFixed(2)}</div>
-                </div>
-              );
-            })}
+            {pedidos
+              .filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr())
+              .map(renderPedidoCard)}
+            {pedidos.filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()).length === 0 && (
+              <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido no momento.</p>
+            )}
           </div>
         )}
 
-        {/* --- PÁGINA DE SABORES / BEBIDAS / EQUIPE (TABELA UNIFICADA) --- */}
+        {/* --- PÁGINA DE HISTÓRICO DE PEDIDOS --- */}
+        {aba === 'historico' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex items-center gap-4 w-full md:w-1/3">
+              <Search className="text-gray-400" size={20}/>
+              <input type="date" className="bg-transparent font-black outline-none w-full text-gray-900" value={filtroHist} onChange={e => setFiltroHist(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).map(renderPedidoCard)}
+              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).length === 0 && (
+                <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido encontrado nesta data.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- TABELAS --- */}
         {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -344,7 +353,6 @@ export default function App() {
                           {it.name || it.title || it.nome}
                         </p>
                         
-                        {/* ETIQUETA DE PROMOÇÃO NA TABELA */}
                         {aba === 'sabores' && it.isPromo && (
                           <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 border border-red-200">
                             <Flame size={10}/> Promo
@@ -358,13 +366,13 @@ export default function App() {
                       
                       {aba === 'sabores' && (
                         <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>
-                          {it.desc || it.description || '⚠️ Sem ingredientes cadastrados.'}
+                          {it.desc || it.description || '⚠️ Sem ingredientes.'}
                         </p>
                       )}
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
-                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>Preço: R$ {it.price.toFixed(2)}</span>}
+                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {it.price.toFixed(2)}</span>}
                     {aba === 'sabores' && it.prices && (
                       <div className="flex flex-col gap-1">
                         <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>G: R$ {it.prices.grande}</span>
@@ -377,19 +385,15 @@ export default function App() {
                   </td>
                   <td className="p-6 text-right space-x-2 whitespace-nowrap">
                     {['sabores', 'bebidas'].includes(aba) && (
-                      <button 
-                        onClick={() => toggleActive(it)} 
-                        className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}
-                        title={it.isActive === false ? "Voltar a Vender" : "Marcar como Esgotado"}
-                      >
+                      <button onClick={() => toggleActive(it)} className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}>
                         {it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </button>
                     )}
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
                     <button onClick={async () => { 
                       if (window.confirm('Eliminar permanentemente?')) {
-                        const collectionName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
-                        await deleteDoc(doc(db, collectionName, String(it.id)));
+                        const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
+                        await deleteDoc(doc(db, colName, String(it.id)));
                       }
                     }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
@@ -404,7 +408,7 @@ export default function App() {
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex items-center gap-4">
               <Search className="text-gray-400" size={20}/>
-              <input type="date" className="bg-transparent font-black outline-none w-full text-gray-900" value={filtro} onChange={e => setFiltro(e.target.value)} />
+              <input type="date" className="bg-transparent font-black outline-none w-full text-gray-900" value={filtroCaixa} onChange={e => setFiltroCaixa(e.target.value)} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
               <div className="bg-white p-8 rounded-[40px] shadow-sm border border-green-100"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Faturamento</p><p className="text-3xl font-black text-green-600">R$ {stats.total.toFixed(2)}</p></div>
@@ -412,19 +416,19 @@ export default function App() {
               <div className="bg-white p-8 rounded-[40px] shadow-sm border"><p className="text-[10px] font-black text-gray-400 uppercase mb-2">Pedidos OK</p><p className="text-4xl font-black text-blue-600">{stats.qtd}</p></div>
             </div>
             <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
-              <h3 className="font-black uppercase text-xs text-gray-400 border-b border-gray-50 pb-4">Ranking de Vendas do Dia</h3>
+              <h3 className="font-black uppercase text-xs text-gray-400 border-b border-gray-50 pb-4">Ranking de Vendas</h3>
               {stats.itens.map(([n, q]) => (
                 <div key={n} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2">
                   <span className="text-gray-800 uppercase text-xs">{n}</span>
                   <span className="bg-red-50 text-red-600 px-4 py-1 rounded-full text-xs font-black">{q}x</span>
                 </div>
               ))}
-              {stats.itens.length === 0 && <p className="text-center py-10 text-gray-300 font-bold uppercase">Nenhuma venda hoje.</p>}
+              {stats.itens.length === 0 && <p className="text-center py-10 text-gray-300 font-bold uppercase">Nenhuma venda.</p>}
             </div>
           </div>
         )}
 
-        {/* --- CONFIGURAÇÕES DO SISTEMA --- */}
+        {/* --- SISTEMA --- */}
         {aba === 'sistema' && (
           <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
              <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
@@ -435,22 +439,22 @@ export default function App() {
                 </label>
              </div>
              <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
-               <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ESTÁ ABERTA' : 'LOJA FECHADA'}
+               <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
              <div className="space-y-4 pt-4">
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })} placeholder="Ex: 19997650322"/></div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Taxa de Entrega</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.taxa} onChange={e => setCfg({ ...cfg, taxa: parseFloat(e.target.value) })} placeholder="R$"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Taxa</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.taxa} onChange={e => setCfg({ ...cfg, taxa: parseFloat(e.target.value) })}/></div>
                 </div>
-                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Título da Impressão</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })} placeholder="A GRANDONNA"/></div>
+                <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Imprimir</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })}/></div>
              </div>
-             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Sistema Atualizado!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl hover:scale-95 transition-all">Guardar Configurações</button>
+             <button onClick={async () => { await setDoc(doc(db, 'loja_config', 'geral'), cfg); alert('Atualizado!'); }} className="w-full bg-black text-white py-6 rounded-[30px] font-black uppercase shadow-xl hover:scale-95 transition-all">Guardar Configurações</button>
           </div>
         )}
       </main>
 
-      {/* --- MODAL DE EDIÇÃO DE ITENS --- */}
+      {/* --- MODAL DE EDIÇÃO --- */}
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -467,11 +471,10 @@ export default function App() {
             )}
             
             <div className="space-y-4">
-              <input placeholder="Nome do Item / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
+              <input placeholder="Nome / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
               
-              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate...)" className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
+              {aba === 'sabores' && <textarea placeholder="Ingredientes..." className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
-              {/* CAIXINHA DE CHECKBOX DA PROMOÇÃO */}
               {aba === 'sabores' && (
                 <label className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors">
                   <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
@@ -490,8 +493,8 @@ export default function App() {
                 </div>
               )}
               
-              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
-              {aba === 'equipe' && <input placeholder="E-mail Gmail do funcionário" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
+              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
+              {aba === 'equipe' && <input placeholder="E-mail" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
             </div>
             
             <button type="submit" disabled={isUp} className="w-full bg-green-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-green-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
@@ -514,7 +517,7 @@ export default function App() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
-              {chatMsgs.length === 0 && <p className="text-center text-gray-400 text-xs font-bold mt-10 uppercase">Nenhuma mensagem ainda.</p>}
+              {chatMsgs.length === 0 && <p className="text-center text-gray-400 text-xs font-bold mt-10 uppercase">Nenhuma mensagem.</p>}
               {chatMsgs.map(m => (
                 <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`p-4 rounded-[24px] max-w-[85%] text-sm font-medium shadow-sm ${m.sender === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-800 rounded-tl-none'}`}>
