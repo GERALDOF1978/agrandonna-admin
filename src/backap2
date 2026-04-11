@@ -20,7 +20,6 @@ const provider = new GoogleAuthProvider();
 const IMGBB_KEY = "00f5e74d2657312c5173d6aa4018c614";
 const OWNER_EMAIL = "geraldof1978@gmail.com";
 
-// Função para pegar a data correta no fuso horário local (evita bug de UTC depois das 21h)
 const getDataLocalStr = (timestamp) => {
   const d = timestamp ? new Date(timestamp) : new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -39,20 +38,20 @@ export default function App() {
   const [isUp, setIsUp] = useState(false);
   const [isMst, setIsMst] = useState(false);
   
-  // Datas para Filtros
   const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
   
   const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA' });
 
-  // Estados do Chat
   const [chatAberto, setChatAberto] = useState(null);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [adminMsg, setAdminMsg] = useState('');
   const [alertasChat, setAlertasChat] = useState([]); 
   const scrollRef = useRef(null);
+  
+  // Controle sonoro de novos pedidos
+  const qtdPendentes = useRef(0);
 
-  // Monitorar Autenticação
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
       if (u) {
@@ -71,13 +70,22 @@ export default function App() {
     });
   }, []);
 
-  // Carregar Dados
   useEffect(() => {
     if (!hasPerm) return;
 
-    const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => 
-      setPedidos(s.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => {
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // LÓGICA DE ALERTA SONORO DE NOVO PEDIDO
+      const novosPendentes = data.filter(p => p.status === 'pendente').length;
+      if (novosPendentes > qtdPendentes.current) {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.play().catch(e => console.log("Áudio bloqueado até o usuário interagir com a tela."));
+      }
+      qtdPendentes.current = novosPendentes;
+      setPedidos(data);
+    });
+
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -87,7 +95,6 @@ export default function App() {
     return () => { unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
 
-  // Alertas de Chat
   useEffect(() => {
     if (!hasPerm || pedidos.length === 0) return;
     const ativos = [...new Set(pedidos.filter(p => ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
@@ -105,7 +112,6 @@ export default function App() {
     return () => unsubs.forEach(u => u());
   }, [pedidos, hasPerm]);
 
-  // Carregar janela do chat
   useEffect(() => {
     if (!chatAberto) return;
     const unsub = onSnapshot(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), s => {
@@ -121,6 +127,57 @@ export default function App() {
       text: adminMsg, sender: 'admin', timestamp: Date.now() 
     });
     setAdminMsg('');
+  };
+
+  // NOVA FUNÇÃO: IMPRESSÃO TÉRMICA DE PEDIDO
+  const imprimirPedido = (p) => {
+    const janela = window.open('', '', 'width=300,height=600');
+    janela.document.write(`
+      <html>
+        <head>
+          <title>Cupom #${String(p.id).slice(-4).toUpperCase()}</title>
+          <style>
+            body { font-family: monospace; font-size: 14px; margin: 0; padding: 10px; width: 100%; max-width: 300px; color: black; }
+            h1 { font-size: 18px; text-align: center; margin: 0 0 10px 0; }
+            .divisor { border-bottom: 1px dashed #000; margin: 10px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .bold { font-weight: bold; }
+            .text-center { text-align: center; }
+            .margin-bot { margin-bottom: 5px; }
+          </style>
+        </head>
+        <body>
+          <h1>${cfg.topo || 'A GRANDONNA'}</h1>
+          <div class="text-center margin-bot">PEDIDO #${String(p.id).slice(-4).toUpperCase()}</div>
+          <div class="text-center margin-bot">${new Date(p.timestamp).toLocaleDateString()} - ${new Date(p.timestamp).toLocaleTimeString()}</div>
+          <div class="divisor"></div>
+          <div class="bold">CLIENTE:</div>
+          <div>${p.clientName}</div>
+          <div class="margin-bot">Tel: ${p.clientPhone}</div>
+          <div class="divisor"></div>
+          <div class="bold">${p.entrega === 'retirada' ? 'BALCAO / RETIRADA' : 'DELIVERY'}</div>
+          ${p.entrega === 'entrega' ? `<div class="margin-bot">${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}</div>` : ''}
+          <div class="divisor"></div>
+          <div class="bold margin-bot">ITENS:</div>
+          ${p.items?.map(it => `
+            <div class="flex bold"><span>1x ${it.name || `PZ ${it.tamanho?.name}`}</span><span>R$ ${it.preco?.toFixed(2)}</span></div>
+            ${it.sabores ? `<div style="font-size:12px; margin-bottom:8px; padding-left:10px;">${it.sabores.map(s => '+ ' + s.name).join('<br>')}</div>` : ''}
+          `).join('')}
+          <div class="divisor"></div>
+          <div class="flex bold" style="font-size: 16px;"><span>TOTAL:</span><span>R$ ${p.total?.toFixed(2)}</span></div>
+          <div class="divisor"></div>
+          <div class="margin-bot">Pagamento: ${p.pag === 'pix_app' ? 'PIX APP' : p.pag.toUpperCase()}</div>
+          ${p.pag === 'dinheiro' && p.troco ? `<div class="bold">Levar Troco: R$ ${p.troco}</div>` : ''}
+          <div class="divisor"></div>
+          <div class="text-center margin-bot">Obrigado pela preferencia!</div>
+          <div class="text-center">.</div>
+          <script>
+            window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }
+          </script>
+        </body>
+      </html>
+    `);
+    janela.document.close();
   };
 
   const stats = useMemo(() => {
@@ -167,11 +224,8 @@ export default function App() {
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
   };
 
-  // Função centralizada para desenhar os Cards de Pedidos (usada na aba Pedidos e Histórico)
   const renderPedidoCard = (p) => {
-    // Inteligência do Chat: Verifica se é o pedido MAIS NOVO deste cliente
     const isLatestForUser = pedidos.find(x => x.userId === p.userId)?.id === p.id;
-    // O alerta só aparece se tem mensagem nova E é o card mais recente do cliente
     const temAlerta = alertasChat.includes(p.userId) && isLatestForUser;
 
     return (
@@ -184,6 +238,14 @@ export default function App() {
             <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
           </div>
           <div className="flex gap-2">
+            
+            {/* NOVO: BOTÃO DE IMPRIMIR - APARECE SÓ SE NÃO FOR PENDENTE */}
+            {p.status !== 'pendente' && (
+              <button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido">
+                <Printer size={14}/>
+              </button>
+            )}
+
             <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
             
             <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
@@ -256,7 +318,6 @@ export default function App() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {/* Adicionado Historico aqui no Menu e fechando os Modais ao clicar! */}
           {['pedidos', 'historico', 'sabores', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
@@ -300,7 +361,6 @@ export default function App() {
           )}
         </header>
 
-        {/* --- PÁGINA DE PEDIDOS DO DIA --- */}
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {pedidos
@@ -312,7 +372,6 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PÁGINA DE HISTÓRICO DE PEDIDOS --- */}
         {aba === 'historico' && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex items-center gap-4 w-full md:w-1/3">
@@ -328,7 +387,6 @@ export default function App() {
           </div>
         )}
 
-        {/* --- TABELAS --- */}
         {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -403,7 +461,6 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PÁGINA DO CAIXA --- */}
         {aba === 'caixa' && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm flex items-center gap-4">
@@ -428,7 +485,6 @@ export default function App() {
           </div>
         )}
 
-        {/* --- SISTEMA --- */}
         {aba === 'sistema' && (
           <div className="max-w-md bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
              <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
@@ -454,7 +510,6 @@ export default function App() {
         )}
       </main>
 
-      {/* --- MODAL DE EDIÇÃO --- */}
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -502,7 +557,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- MODAL DO CHAT COM O CLIENTE --- */}
       {chatAberto && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-end z-[200] animate-in fade-in">
           <div className="w-full md:w-96 bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
