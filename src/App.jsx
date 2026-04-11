@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -42,16 +42,10 @@ export default function App() {
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
   
   const [cfg, setCfg] = useState({ 
-    tempo: 40, 
-    taxaMinima: 6, 
-    kmIncluso: 3,
-    valorKm: 1,
-    cepLoja: '13500000',
-    horaAbre: '18:00',
-    aberto: true, 
-    zap: '19988723803', 
-    logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', 
-    topo: 'A GRANDONNA' 
+    tempo: 40, taxaMinima: 6, kmIncluso: 3, valorKm: 1, cepLoja: '13500000', horaAbre: '18:00',
+    aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA',
+    // Novos campos Splash e Promoções
+    splashAtivo: false, splashImg: '', promoGrande: true, promoGigante: true, promoMeioMetro: true, promoUmMetro: true
   });
 
   const [chatAberto, setChatAberto] = useState(null);
@@ -97,6 +91,7 @@ export default function App() {
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    
     const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => {
       if(s.exists()){
         const data = s.data();
@@ -106,7 +101,11 @@ export default function App() {
           kmIncluso: data.kmIncluso ?? 3,
           valorKm: data.valorKm ?? 1,
           cepLoja: data.cepLoja ?? '13500000',
-          horaAbre: data.horaAbre ?? '18:00'
+          horaAbre: data.horaAbre ?? '18:00',
+          promoGrande: data.promoGrande ?? true,
+          promoGigante: data.promoGigante ?? true,
+          promoMeioMetro: data.promoMeioMetro ?? true,
+          promoUmMetro: data.promoUmMetro ?? true
         });
       }
     });
@@ -339,7 +338,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
-      <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40">
+      <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
           {['pedidos', 'historico', 'sabores', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
@@ -376,7 +375,7 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false } :
+                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false } :
                 aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
@@ -440,6 +439,11 @@ export default function App() {
                             <Flame size={10}/> Promo
                           </span>
                         )}
+                        {aba === 'sabores' && it.isDoce && (
+                          <span className="bg-pink-100 text-pink-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-pink-200">
+                            🍬 Doce
+                          </span>
+                        )}
 
                         {['sabores', 'bebidas'].includes(aba) && it.isActive === false && (
                           <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
@@ -456,7 +460,6 @@ export default function App() {
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
                     {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {it.price.toFixed(2)}</span>}
                     
-                    {/* ATUALIZADO PARA EXIBIR OS 5 TAMANHOS NA TABELA DE SABORES */}
                     {aba === 'sabores' && it.prices && (
                       <div className="flex flex-wrap gap-1 max-w-[250px]">
                         {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {it.prices.broto}</span>}
@@ -527,6 +530,27 @@ export default function App() {
                <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
 
+             {/* BLOCO SPLASH SCREEN */}
+             <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h3 className="font-black text-xs text-purple-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><ImgIcon size={14}/> Splash Screen (Tela de Aviso)</h3>
+                
+                {cfg.splashImg && (
+                  <div className="flex justify-center"><img src={cfg.splashImg} className="w-full max-w-[200px] h-auto rounded-2xl shadow-md border border-gray-200" /></div>
+                )}
+                
+                <div className="flex items-center gap-4 justify-between bg-gray-50 p-4 rounded-3xl border border-gray-100">
+                  <label className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer hover:bg-purple-600 transition-all uppercase flex items-center gap-2">
+                    <Upload size={12}/> Foto do Aviso
+                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, splashImg: url }))} />
+                  </label>
+                  
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg.splashAtivo} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} />
+                    <span className="font-bold text-xs uppercase text-purple-600">Ativar Splash</span>
+                  </label>
+                </div>
+             </div>
+
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Geral</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -539,13 +563,30 @@ export default function App() {
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-blue-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><MapPin size={14}/> Configuração de Frete por KM</h3>
-                
                 <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP Base da Loja (Saída)</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.cepLoja} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
-                
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.taxaMinima} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso (Mínima)</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">R$ por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                </div>
+             </div>
+
+             {/* BLOCO DE CARDS DE PROMOÇÃO */}
+             <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h3 className="font-black text-xs text-orange-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><Flame size={14}/> Exibir Cards de Promoção Fixo no App</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
+                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGrande} onChange={e => setCfg({ ...cfg, promoGrande: e.target.checked })} /> <span className="font-bold text-xs uppercase">Grande</span>
+                  </label>
+                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
+                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGigante} onChange={e => setCfg({ ...cfg, promoGigante: e.target.checked })} /> <span className="font-bold text-xs uppercase">Gigante</span>
+                  </label>
+                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
+                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoMeioMetro} onChange={e => setCfg({ ...cfg, promoMeioMetro: e.target.checked })} /> <span className="font-bold text-xs uppercase">1/2 Metro</span>
+                  </label>
+                  <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-2xl cursor-pointer hover:bg-gray-100">
+                    <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoUmMetro} onChange={e => setCfg({ ...cfg, promoUmMetro: e.target.checked })} /> <span className="font-bold text-xs uppercase">1 Metro</span>
+                  </label>
                 </div>
              </div>
 
@@ -574,14 +615,21 @@ export default function App() {
               
               {aba === 'sabores' && <textarea placeholder="Ingredientes..." className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
+              {/* NOVA OPÇÃO DE PIZZA DOCE NO SABOR */}
               {aba === 'sabores' && (
-                <label className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors">
-                  <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
-                  <span className="font-bold text-red-600 flex items-center gap-2"><Flame size={18}/> Destacar como Promoção</span>
-                </label>
+                <div className="flex gap-4">
+                  <label className="flex-1 flex flex-col items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors text-center">
+                    <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
+                    <span className="font-bold text-red-600 text-xs flex items-center gap-1 uppercase"><Flame size={14}/> Destacar Promoção</span>
+                  </label>
+                  
+                  <label className="flex-1 flex flex-col items-center gap-2 p-4 bg-pink-50 border border-pink-100 rounded-3xl cursor-pointer hover:bg-pink-100 transition-colors text-center">
+                    <input type="checkbox" className="w-5 h-5 accent-pink-600 rounded" checked={edit.isDoce || false} onChange={e => setEdit({ ...edit, isDoce: e.target.checked })} />
+                    <span className="font-bold text-pink-600 text-xs uppercase">🍬 É Pizza Doce?</span>
+                  </label>
+                </div>
               )}
 
-              {/* ATUALIZADO: 5 TAMANHOS DE PREÇOS NO CADASTRO DE SABORES */}
               {aba === 'sabores' && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map(t => (
