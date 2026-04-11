@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -35,29 +35,28 @@ export default function App() {
   const [filtro, setFiltro] = useState(new Date().toISOString().split('T')[0]);
   const [cfg, setCfg] = useState({ tempo: 40, taxa: 6, aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA' });
 
+  // Estados do Chat
+  const [chatAberto, setChatAberto] = useState(null); // Guarda { userId, clientName }
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [adminMsg, setAdminMsg] = useState('');
+  const [alertasChat, setAlertasChat] = useState([]); // Guarda os UIDs de quem mandou msg nova
+  const scrollRef = useRef(null);
+
   // 1. Monitorar Autenticação
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
       if (u) {
         if (u.email === OWNER_EMAIL) {
-          setUser(u);
-          setHasPerm(true);
+          setUser(u); setHasPerm(true);
         } else {
-          // Verifica se o email está na lista de admin_users
           onSnapshot(collection(db, 'admin_users'), s => {
             const lista = s.docs.map(d => d.data().email);
-            if (lista.includes(u.email)) {
-              setUser(u);
-              setHasPerm(true);
-            } else {
-              signOut(auth);
-              alert("Acesso Negado!");
-            }
+            if (lista.includes(u.email)) { setUser(u); setHasPerm(true); } 
+            else { signOut(auth); alert("Acesso Negado!"); }
           });
         }
       } else {
-        setHasPerm(false);
-        setUser(null);
+        setHasPerm(false); setUser(null);
       }
     });
   }, []);
@@ -85,12 +84,54 @@ export default function App() {
       s.exists() && setCfg(s.data())
     );
 
-    return () => {
-      unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC();
-    };
+    return () => { unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
 
-  // 3. Estatísticas do Caixa
+  // 3. Sistema Inteligente de Alertas de Chat
+  useEffect(() => {
+    if (!hasPerm || pedidos.length === 0) return;
+    
+    // Pega os IDs únicos de clientes que têm pedidos em andamento
+    const ativos = [...new Set(pedidos.filter(p => ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
+    
+    const unsubs = ativos.map(uid => {
+      // Ouve a última mensagem desse cliente
+      return onSnapshot(query(collection(db, 'artifacts', 'grandonna-oficial', 'users', uid, 'chat'), orderBy('timestamp', 'desc')), s => {
+        if (!s.empty) {
+          const lastMsg = s.docs[0].data();
+          // Se a última mensagem for do cliente, ativa o alerta
+          if (lastMsg.sender === 'user') {
+            setAlertasChat(prev => [...new Set([...prev, uid])]);
+          } else {
+            setAlertasChat(prev => prev.filter(id => id !== uid));
+          }
+        }
+      });
+    });
+
+    return () => unsubs.forEach(u => u());
+  }, [pedidos, hasPerm]);
+
+  // 4. Carregar mensagens quando abrir o modal de chat
+  useEffect(() => {
+    if (!chatAberto) return;
+    const unsub = onSnapshot(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), s => {
+      setChatMsgs(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>a.timestamp-b.timestamp));
+      setTimeout(() => scrollRef.current?.scrollIntoView({behavior:'smooth'}), 100);
+    });
+    return () => unsub();
+  }, [chatAberto]);
+
+  // 5. Enviar Mensagem do Admin
+  const enviarMsgAdmin = async (e) => {
+    e.preventDefault(); if (!adminMsg.trim()) return;
+    await addDoc(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), { 
+      text: adminMsg, sender: 'admin', timestamp: Date.now() 
+    });
+    setAdminMsg('');
+  };
+
+  // Estatísticas do Caixa
   const stats = useMemo(() => {
     const pedsDoDia = pedidos.filter(p => 
       new Date(p.timestamp).toISOString().split('T')[0] === filtro && p.status === 'entregue'
@@ -104,62 +145,41 @@ export default function App() {
     return { total, qtd: pedsDoDia.length, itens: Object.entries(contagem) };
   }, [pedidos, filtro]);
 
-  // 4. Upload de Imagem (ImgBB)
+  // Upload de Imagem (ImgBB)
   const handleImg = async (file, callback) => {
     setIsUp(true);
-    const fd = new FormData();
-    fd.append('image', file);
+    const fd = new FormData(); fd.append('image', file);
     try {
       const r = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
-      const d = await r.json();
-      callback(d.data.url);
-    } catch (e) {
-      alert("Erro ao carregar imagem.");
-    }
+      const d = await r.json(); callback(d.data.url);
+    } catch (e) { alert("Erro ao carregar imagem."); }
     setIsUp(false);
   };
 
-  // 5. Guardar Item no Banco (Atualizado com merge para ser à prova de erros)
+  // Guardar Item no Banco
   const salvar = async (e) => {
     e.preventDefault();
     const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
-    const data = { ...edit };
-    const id = data.id;
-    delete data.id;
+    const data = { ...edit }; const id = data.id; delete data.id;
 
     try {
       if (id) {
-        // O Firebase exige que o ID seja sempre uma string
         await setDoc(doc(db, col, String(id)), data, { merge: true });
       } else {
-        // Se for sabor ou bebida nova, começa como disponível
-        if (['sabores', 'bebidas'].includes(aba)) {
-          data.isActive = true;
-        }
+        if (['sabores', 'bebidas'].includes(aba)) data.isActive = true;
         await addDoc(collection(db, col), data);
       }
       setEdit(null);
-    } catch (err) {
-      console.error("Erro Firebase (Salvar):", err);
-      alert("Erro ao guardar os dados: " + err.message);
-    }
+    } catch (err) { alert("Erro ao guardar os dados: " + err.message); }
   };
 
-  // 6. Alternar Disponibilidade (Atualizado para setDoc com merge)
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
-    
     const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
-    const newState = item.isActive === false ? true : false; // Inverte o estado
-    
+    const newState = item.isActive === false ? true : false;
     try {
-      // Usar setDoc com { merge: true } garante a atualização sem falhar caso falte algum campo anterior no Firebase
-      // String(item.id) garante que o erro r.indexOf is not a function não volte a acontecer
       await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true });
-    } catch (err) {
-      console.error("Erro Firebase (Toggle Active):", err);
-      alert("Erro ao atualizar disponibilidade: " + err.message);
-    }
+    } catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
   };
 
   if (!hasPerm) return (
@@ -204,7 +224,7 @@ export default function App() {
       </aside>
 
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${aba === 'pedidos' ? 'bg-gray-300' : 'bg-gray-50'}`}>
-        <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50">
+        <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
           <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
           {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
             <button onClick={() => {
@@ -213,7 +233,7 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '', isActive: true } :
+                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { grande: 0, gigante: 0, meio_metro: 0 }, img: '', isActive: true, isPromo: false } :
                 aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
@@ -225,44 +245,77 @@ export default function App() {
         {/* --- PÁGINA DE PEDIDOS --- */}
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {pedidos.map(p => (
-              <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 ${p.status === 'pendente' ? 'border-red-600 animate-pulse' : 'border-transparent shadow-gray-200'}`}>
-                <div className="flex justify-between border-b border-gray-50 pb-2">
-                  <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase">Cod: {String(p.id).slice(-4)}</span>
-                  <div className="flex gap-2">
-                    <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-full hover:scale-110 transition-transform"><Phone size={14}/></button>
-                    <button className="p-2 bg-blue-50 text-blue-600 rounded-full"><MessageCircle size={14}/></button>
-                  </div>
-                </div>
-                <div className="font-black uppercase text-sm text-gray-900">{p.clientName || 'Cliente sem nome'}</div>
-                <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2">
-                  <MapPin size={12} className="text-red-500 shrink-0"/> {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num}`}
-                </div>
-                <div className="flex-1 py-2 space-y-3 border-y border-gray-50">
-                  {p.items?.map((it, idx) => (
-                    <div key={idx} className="flex flex-col">
-                      <div className="flex justify-between font-bold text-xs text-gray-800">
-                        <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                        <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
-                      </div>
-                      {it.sabores?.map((s, si) => (
-                        <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
-                          + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
-                        </p>
-                      ))}
+            {pedidos.map(p => {
+              const temAlerta = alertasChat.includes(p.userId);
+              return (
+                <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
+                  {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
+                  
+                  <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
+                    <div>
+                      <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span>
+                      <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
-                  ))}
+                    <div className="flex gap-2">
+                      <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm"><Phone size={14}/></button>
+                      
+                      {/* BOTÃO DO CHAT COM ANIMAÇÃO SE TIVER MENSAGEM */}
+                      <button 
+                        onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
+                        className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`}
+                      >
+                        <MessageCircle size={14}/>
+                        {temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="relative z-10">
+                    <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div>
+                    <div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div>
+                  </div>
+
+                  <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
+                    <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
+                    {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
+                  </div>
+                  
+                  <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
+                    {p.items?.map((it, idx) => (
+                      <div key={idx} className="flex flex-col">
+                        <div className="flex justify-between font-bold text-xs text-gray-800">
+                          <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
+                          <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
+                        </div>
+                        {it.sabores?.map((s, si) => (
+                          <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
+                            + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* INFO DE PAGAMENTO */}
+                  <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10">
+                    <span className="text-[9px] font-black uppercase text-gray-500">
+                      Forma de Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
+                      {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
+                    </span>
+                  </div>
+                  
+                  {/* BOTÕES DE STATUS COM CORES FIXAS */}
+                  <div className="grid grid-cols-2 gap-1.5 mt-1 relative z-10">
+                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
+                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
+                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
+                    <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
+                  </div>
+                  
+                  <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {p.total?.toFixed(2)}</div>
                 </div>
-                {/* BOTÕES DE STATUS COM CORES FIXAS */}
-                <div className="grid grid-cols-2 gap-1.5 mt-2">
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Pendente</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Cozinha</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Entrega</button>
-                  <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md' : 'bg-gray-100 text-gray-400'}`}>Concluído</button>
-                </div>
-                <div className="font-black text-green-600 text-center text-xl pt-2">R$ {p.total?.toFixed(2)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -276,7 +329,7 @@ export default function App() {
               <tbody>{(aba === 'sabores' ? sabores : aba === 'bebidas' ? bebidas : aba === 'banners' ? banners : equipe).map(it => (
                 <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       {(it.img || it.imageUrl) ? (
                         <img src={it.img || it.imageUrl} className={`w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white ${it.isActive === false ? 'grayscale opacity-50' : ''}`}/>
                       ) : (
@@ -286,19 +339,25 @@ export default function App() {
                       )}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className={`font-black uppercase text-xs tracking-tighter ${it.isActive === false ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                           {it.name || it.title || it.nome}
                         </p>
+                        
+                        {/* ETIQUETA DE PROMOÇÃO NA TABELA */}
+                        {aba === 'sabores' && it.isPromo && (
+                          <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 border border-red-200">
+                            <Flame size={10}/> Promo
+                          </span>
+                        )}
+
                         {['sabores', 'bebidas'].includes(aba) && it.isActive === false && (
                           <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
                         )}
                       </div>
                       
-                      {/* INGREDIENTES EM VERMELHO E NEGRITO (SÓ PARA SABORES) */}
                       {aba === 'sabores' && (
                         <p className={`text-[11px] font-black italic mt-1 max-w-[350px] leading-tight uppercase ${it.isActive === false ? 'text-gray-400' : 'text-red-600'}`}>
-                          {/* Verifica tanto 'desc' como 'description' para garantir compatibilidade com registos antigos */}
                           {it.desc || it.description || '⚠️ Sem ingredientes cadastrados.'}
                         </p>
                       )}
@@ -376,7 +435,7 @@ export default function App() {
                 </label>
              </div>
              <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
-               <Power size={22}/> {cfg.aberto ? 'LOJA ESTÁ ABERTA' : 'LOJA FECHADA'}
+               <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ESTÁ ABERTA' : 'LOJA FECHADA'}
              </button>
              <div className="space-y-4 pt-4">
                 <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })} placeholder="Ex: 19997650322"/></div>
@@ -391,35 +450,89 @@ export default function App() {
         )}
       </main>
 
-      {/* --- MODAL DE EDIÇÃO --- */}
+      {/* --- MODAL DE EDIÇÃO DE ITENS --- */}
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black uppercase italic border-b pb-4 flex justify-between items-center text-gray-800 tracking-tighter">Configurar {aba} <button type="button" onClick={() => setEdit(null)}><X size={30} className="text-gray-300 hover:text-black"/></button></h2>
+            
             {['sabores', 'bebidas', 'banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
                  <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />
-                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center">
+                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center uppercase">
                    {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setEdit({ ...edit, [aba === 'banners' ? 'imageUrl' : 'img']: url }))} />
                  </label>
               </div>
             )}
+            
             <div className="space-y-4">
-              <input placeholder="Nome do Item / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
-              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate, manjericão...)" className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
+              <input placeholder="Nome do Item / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
+              
+              {aba === 'sabores' && <textarea placeholder="Ingredientes da Pizza (Ex: Mussarela, tomate...)" className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
+              
+              {/* CAIXINHA DE CHECKBOX DA PROMOÇÃO */}
+              {aba === 'sabores' && (
+                <label className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors">
+                  <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
+                  <span className="font-bold text-red-600 flex items-center gap-2"><Flame size={18}/> Destacar como Promoção</span>
+                </label>
+              )}
+
               {aba === 'sabores' && (
                 <div className="grid grid-cols-2 gap-4">
                   {['grande', 'gigante', 'meio_metro'].map(t => (
-                    <div key={t}><label className="text-[10px] uppercase font-black text-gray-400 px-3">{t.replace('_',' ')}</label><input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, [t]: parseFloat(e.target.value) } })}/></div>
+                    <div key={t}>
+                      <label className="text-[10px] uppercase font-black text-gray-400 px-3">{t.replace('_',' ')}</label>
+                      <input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, [t]: parseFloat(e.target.value) } })}/>
+                    </div>
                   ))}
                 </div>
               )}
-              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
+              
+              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço de Venda" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
               {aba === 'equipe' && <input placeholder="E-mail Gmail do funcionário" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
             </div>
-            <button type="submit" disabled={isUp} className="w-full bg-red-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
+            
+            <button type="submit" disabled={isUp} className="w-full bg-green-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-green-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
           </form>
+        </div>
+      )}
+
+      {/* --- MODAL DO CHAT COM O CLIENTE --- */}
+      {chatAberto && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-end z-[200] animate-in fade-in">
+          <div className="w-full md:w-96 bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-6 bg-black text-white flex justify-between items-center rounded-bl-[40px]">
+              <div>
+                <h3 className="font-black italic uppercase text-lg leading-tight">{chatAberto.clientName}</h3>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/> Online no App
+                </p>
+              </div>
+              <button onClick={() => setChatAberto(null)} className="p-2 bg-gray-900 rounded-full hover:bg-red-600 transition-colors"><X size={20}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
+              {chatMsgs.length === 0 && <p className="text-center text-gray-400 text-xs font-bold mt-10 uppercase">Nenhuma mensagem ainda.</p>}
+              {chatMsgs.map(m => (
+                <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`p-4 rounded-[24px] max-w-[85%] text-sm font-medium shadow-sm ${m.sender === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-800 rounded-tl-none'}`}>
+                    {m.text}
+                    <span className={`block text-[8px] font-bold mt-1 uppercase ${m.sender === 'admin' ? 'text-blue-200' : 'text-gray-400'}`}>
+                      {new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div ref={scrollRef}/>
+            </div>
+            
+            <form onSubmit={enviarMsgAdmin} className="p-4 bg-white border-t border-gray-100 flex gap-2">
+              <input value={adminMsg} onChange={e=>setAdminMsg(e.target.value)} placeholder="Responder cliente..." className="flex-1 bg-gray-100 p-4 rounded-2xl outline-none border border-transparent focus:border-blue-500 text-sm transition-colors" />
+              <button type="submit" disabled={!adminMsg.trim()} className="bg-blue-600 text-white w-14 h-14 rounded-2xl flex items-center justify-center active:scale-90 transition-transform shadow-md shadow-blue-500/20 disabled:opacity-50"><Send size={20}/></button>
+            </form>
+          </div>
         </div>
       )}
     </div>
