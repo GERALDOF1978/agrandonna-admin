@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2 } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -37,6 +37,7 @@ export default function App() {
   const [edit, setEdit] = useState(null);
   const [isUp, setIsUp] = useState(false);
   const [isMst, setIsMst] = useState(false);
+  const [loadingMagic, setLoadingMagic] = useState(false);
   
   const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
@@ -44,7 +45,6 @@ export default function App() {
   const [cfg, setCfg] = useState({ 
     tempo: 40, taxaMinima: 6, kmIncluso: 3, valorKm: 1, cepLoja: '13500000', horaAbre: '18:00',
     aberto: true, zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA',
-    // Novos campos Splash e Promoções
     splashAtivo: false, splashImg: '', promoGrande: true, promoGigante: true, promoMeioMetro: true, promoUmMetro: true
   });
 
@@ -145,6 +145,45 @@ export default function App() {
       text: adminMsg, sender: 'admin', timestamp: Date.now() 
     });
     setAdminMsg('');
+  };
+
+  // FUNÇÃO DO BOTÃO MÁGICO
+  const arrumarBancoDeDados = async () => {
+    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços de R$34 no Broto e R$79,90 no 1 Metro para as salgadas. Quer continuar?")) return;
+    
+    setLoadingMagic(true);
+    let atualizadas = 0;
+    
+    // Palavras-chave que indicam que a pizza é doce
+    const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
+
+    for (const sabor of sabores) {
+      const nomeSabor = sabor.name.toLowerCase();
+      // Tenta adivinhar se é doce
+      const isDoce = sabor.isDoce || docesNomes.some(palavra => nomeSabor.includes(palavra));
+      
+      const precos = { ...sabor.prices };
+      
+      if (isDoce) {
+        // Pizza Doce (Zera os que não existem para não aparecer pro cliente)
+        precos.broto = 0;
+        precos.gigante = 0;
+        precos.um_metro = 0;
+      } else {
+        // Pizza Salgada (Coloca os preços se não tiver)
+        if (!precos.broto || precos.broto === 0) precos.broto = 34.00;
+        if (!precos.um_metro || precos.um_metro === 0) precos.um_metro = 79.90;
+      }
+      
+      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), {
+        prices: precos,
+        isDoce: isDoce
+      });
+      atualizadas++;
+    }
+    
+    setLoadingMagic(false);
+    alert(`Mágica Feita! ${atualizadas} pizzas foram ajustadas.`);
   };
 
   const imprimirPedido = (p) => {
@@ -259,15 +298,12 @@ export default function App() {
             <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
           </div>
           <div className="flex gap-2">
-            
             {p.status !== 'pendente' && (
               <button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido">
                 <Printer size={14}/>
               </button>
             )}
-
             <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
-            
             <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
               className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat">
               <MessageCircle size={14}/>
@@ -530,20 +566,25 @@ export default function App() {
                <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
 
-             {/* BLOCO SPLASH SCREEN */}
+             {/* BOTÃO MÁGICO PARA CONSERTAR O CARDÁPIO AUTOMATICAMENTE */}
+             <div className="space-y-4 pt-4 border-t border-gray-100 bg-red-50 p-6 rounded-3xl border border-red-100">
+                <h3 className="font-black text-xs text-red-600 uppercase text-center mb-2 flex justify-center items-center gap-1"><Wand2 size={14}/> Assistente Mágico</h3>
+                <p className="text-[10px] text-red-500 font-bold text-center mb-4">Clique aqui uma vez para o sistema corrigir todas as Pizzas Doces e colocar os preços que faltam (Broto R$34 / 1 Metro R$79,90) nas Salgadas.</p>
+                <button onClick={arrumarBancoDeDados} disabled={loadingMagic} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase shadow-lg hover:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                  {loadingMagic ? <Loader2 className="animate-spin" size={18}/> : <Wand2 size={18}/>} Aplicar Preços em Massa
+                </button>
+             </div>
+
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-purple-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><ImgIcon size={14}/> Splash Screen (Tela de Aviso)</h3>
-                
                 {cfg.splashImg && (
                   <div className="flex justify-center"><img src={cfg.splashImg} className="w-full max-w-[200px] h-auto rounded-2xl shadow-md border border-gray-200" /></div>
                 )}
-                
                 <div className="flex items-center gap-4 justify-between bg-gray-50 p-4 rounded-3xl border border-gray-100">
                   <label className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer hover:bg-purple-600 transition-all uppercase flex items-center gap-2">
                     <Upload size={12}/> Foto do Aviso
                     <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, splashImg: url }))} />
                   </label>
-                  
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg.splashAtivo} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} />
                     <span className="font-bold text-xs uppercase text-purple-600">Ativar Splash</span>
@@ -566,12 +607,11 @@ export default function App() {
                 <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP Base da Loja (Saída)</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.cepLoja} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.taxaMinima} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">R$ por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso (Mínima)</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
                 </div>
              </div>
 
-             {/* BLOCO DE CARDS DE PROMOÇÃO */}
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-orange-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><Flame size={14}/> Exibir Cards de Promoção Fixo no App</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -615,7 +655,6 @@ export default function App() {
               
               {aba === 'sabores' && <textarea placeholder="Ingredientes..." className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
-              {/* NOVA OPÇÃO DE PIZZA DOCE NO SABOR */}
               {aba === 'sabores' && (
                 <div className="flex gap-4">
                   <label className="flex-1 flex flex-col items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors text-center">
