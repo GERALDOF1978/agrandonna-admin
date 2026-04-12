@@ -4,7 +4,7 @@ import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle } from 'lucide-react';
 
-// SISTEMA ANTI-TELA BRANCA (ERROR BOUNDARY)
+// SISTEMA ANTI-TELA BRANCA REAL (ERROR BOUNDARY)
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -18,8 +18,8 @@ class ErrorBoundary extends Component {
       return (
         <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center p-10 text-center text-white font-sans">
           <AlertTriangle size={64} className="mb-4 text-white/50" />
-          <h1 className="text-3xl font-black mb-4 uppercase italic tracking-wider">Modo de Segurança</h1>
-          <p className="mb-6 font-bold text-sm max-w-md">O sistema interceptou um dado antigo/quebrado no banco de dados e evitou a tela branca. Por favor, tire um print desta tela e envie ao suporte.</p>
+          <h1 className="text-3xl font-black mb-4 uppercase italic tracking-wider">Modo de Segurança Ativado</h1>
+          <p className="mb-6 font-bold text-sm max-w-md">Ocorreu um erro no processamento dos dados. A tela branca foi evitada.</p>
           <div className="bg-black/40 p-4 rounded-xl mb-6 font-mono text-xs text-left max-w-xl w-full overflow-auto">
             {this.state.errorMsg}
           </div>
@@ -201,7 +201,7 @@ function MainApp() {
       const novosPendentes = data.filter(p => p?.status === 'pendente').length;
       if (novosPendentes > qtdPendentes.current) {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(e => console.log("Áudio bloqueado."));
+        audio.play().catch(e => console.log("Áudio silenciado pelo navegador."));
       }
       qtdPendentes.current = novosPendentes;
       setPedidos(data || []);
@@ -277,7 +277,7 @@ function MainApp() {
   };
 
   const arrumarBancoDeDados = async () => {
-    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços que faltam. Quer continuar?")) return;
+    if (!window.confirm("Ajustar Sabores Doces e Preços Automáticos?")) return;
     setLoadingMagic(true);
     let atualizadas = 0;
     const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
@@ -303,7 +303,7 @@ function MainApp() {
       atualizadas++;
     }
     setLoadingMagic(false);
-    alert(`Mágica Feita! ${atualizadas} pizzas foram ajustadas.`);
+    alert(`Sucesso! ${atualizadas} pizzas foram ajustadas.`);
   };
 
   const imprimirPedido = (p) => {
@@ -451,7 +451,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now() + Math.random(),
+        id: Date.now(), 
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -479,7 +479,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -520,10 +520,9 @@ function MainApp() {
     const isLatestForUser = Array.isArray(pedidos) ? pedidos.find(x => x?.userId === p?.userId)?.id === p?.id : false;
     const temAlerta = Array.isArray(alertasChat) && p?.userId ? alertasChat.includes(p.userId) && isLatestForUser : false;
     const timeStr = p?.timestamp ? new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
-    const dateStr = p?.timestamp ? new Date(p.timestamp).toLocaleDateString() : '--/--/----';
 
     return (
-      <div key={p?.id || `pedido-${idx}`} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p?.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
+      <div key={p.id || `pedido-${idx}`} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p?.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
         {p?.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
         
         <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
@@ -639,8 +638,8 @@ function MainApp() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg?.logo || LOGO} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {['pdv', 'pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
-            <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
+          {['pdv', 'pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map((m, idx) => (
+            <button key={`nav-${idx}`} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
                 {m === 'pdv' && <Calculator size={16}/>}
                 {m === 'pedidos' && <ClipboardList size={16}/>}
@@ -675,8 +674,8 @@ function MainApp() {
                <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
                
                <div className="flex gap-2 border-b border-gray-100 pb-4 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-                 {['tradicionais', 'doces', 'combos', 'ofertas', 'bebidas'].map(t => (
-                   <button key={t} onClick={()=>setPdvAba(t)} className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                 {['tradicionais', 'doces', 'combos', 'ofertas', 'bebidas'].map((t, idx) => (
+                   <button key={`aba-${idx}`} onClick={()=>setPdvAba(t)} className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                      {t}
                    </button>
                  ))}
@@ -694,7 +693,7 @@ function MainApp() {
                      if(!c) return null;
                      const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
                      return (
-                       <div key={c.id || `combo-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`combo-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
@@ -709,7 +708,7 @@ function MainApp() {
                      if(!o) return null;
                      const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
                      return (
-                       <div key={o.id || `oferta-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`oferta-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
@@ -723,7 +722,7 @@ function MainApp() {
                   {pdvAba === 'bebidas' && Array.isArray(bebidas) && bebidas.map((b, idx) => {
                      if(!b) return null;
                      return (
-                     <div key={b.id || `bebida-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
+                     <div key={`bebida-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
                         <div>
                           <h4 className="font-black text-gray-800 uppercase">{b.name}</h4>
                           <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
@@ -982,8 +981,8 @@ function MainApp() {
             </div>
             <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
               <h3 className="font-black uppercase text-xs text-gray-400 border-b border-gray-50 pb-4">Ranking de Vendas</h3>
-              {stats.itens.map(([n, q]) => (
-                <div key={n} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2">
+              {stats.itens.map(([n, q], idx) => (
+                <div key={`rank-${idx}`} className="flex justify-between font-bold text-sm border-b border-gray-50 pb-2">
                   <span className="text-gray-800 uppercase text-xs">{n}</span>
                   <span className="bg-red-50 text-red-600 px-4 py-1 rounded-full text-xs font-black">{q}x</span>
                 </div>
@@ -1289,7 +1288,7 @@ function MainApp() {
   );
 }
 
-export function AppContainer() {
+export default function App() {
   return (
     <ErrorBoundary>
       <MainApp />
