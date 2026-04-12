@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -25,7 +25,6 @@ const getDataLocalStr = (timestamp) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-// BLINDAGEM: Função para garantir que os dados salvam na coleção exata
 const getCollectionName = (tab) => {
   switch(tab) {
     case 'sabores': return 'menu_sabores';
@@ -39,10 +38,28 @@ const getCollectionName = (tab) => {
   }
 };
 
+// CONSTANTES NECESSÁRIAS PARA O PDV
+const TAMANHOS_FIXOS = [
+  { id: 'broto', name: 'Broto', description: '4 Pedaços', maxFlavors: 1, icon: '🍕', order: 1 },
+  { id: 'grande', name: 'Grande', description: '8 Pedaços', maxFlavors: 2, icon: '🍕', order: 2 },
+  { id: 'gigante', name: 'Gigante', description: '16 Pedaços', maxFlavors: 3, icon: '🤤', order: 3 },
+  { id: 'meio_metro', name: '1/2 Metro', description: 'Até 3 Sabores', maxFlavors: 3, icon: '📏', order: 4 },
+  { id: 'um_metro', name: '1 Metro', description: 'Até 4 Sabores', maxFlavors: 4, icon: '📏', order: 5 }
+];
+
+const isPizzaDoce = (sabor) => {
+  if (!sabor) return false;
+  if (sabor.isDoce === true) return true;
+  if (sabor.isDoce === false) return false;
+  const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
+  const nomeSabor = sabor.name ? String(sabor.name).toLowerCase() : '';
+  return docesNomes.some(p => nomeSabor.includes(p));
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasPerm, setHasPerm] = useState(false);
-  const [aba, setAba] = useState('pedidos');
+  const [aba, setAba] = useState('pdv'); // INICIA NO PDV AGORA
   const [pedidos, setPedidos] = useState([]);
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
@@ -77,6 +94,49 @@ export default function App() {
   const [alertasChat, setAlertasChat] = useState([]); 
   const scrollRef = useRef(null);
   const qtdPendentes = useRef(0);
+
+  // === ESTADOS DO PDV (PONTO DE VENDA) ===
+  const [pdvAba, setPdvAba] = useState('tradicionais'); // tradicionais, doces, combos, ofertas, bebidas
+  const [pdvCart, setPdvCart] = useState([]);
+  const [pdvNome, setPdvNome] = useState('');
+  const [pdvTel, setPdvTel] = useState('');
+  const [pdvEntrega, setPdvEntrega] = useState('entrega');
+  const [pdvEnd, setPdvEnd] = useState('');
+  const [pdvTaxa, setPdvTaxa] = useState('');
+  const [pdvPag, setPdvPag] = useState('dinheiro');
+  const [pdvTroco, setPdvTroco] = useState('');
+  const [pdvObs, setPdvObs] = useState('');
+  
+  // MODAL DO PDV
+  const [pdvConfig, setPdvConfig] = useState(null); 
+  const [pdvSelS, setPdvSelS] = useState([]);
+  const [pdvSelBorda, setPdvSelBorda] = useState(null);
+  const [pdvSelBebidas, setPdvSelBebidas] = useState([]);
+
+  // FUNÇÕES DE PREÇO PARA O PDV
+  const getPrecoSabor = (sabor, tId) => {
+    if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
+    const p = sabor?.prices?.[tId];
+    if (p && Number(p) > 0) return Number(p);
+    const doce = isPizzaDoce(sabor);
+    if (!doce) {
+      if (tId === 'broto') return 34.00;
+      if (tId === 'grande') return 56.00;
+      if (tId === 'gigante') return 88.00;
+      if (tId === 'meio_metro') return 57.90;
+      if (tId === 'um_metro') return 87.90;
+    } else {
+      if (tId === 'grande') return 53.00;
+      if (tId === 'meio_metro') return 59.00;
+    }
+    return 0;
+  };
+
+  const getPrecoBorda = (borda, tId) => {
+    if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
+    const p = borda?.prices?.[tId];
+    return p && Number(p) > 0 ? Number(p) : 0;
+  };
 
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
@@ -197,7 +257,7 @@ export default function App() {
       
       const isComboDef = !isDoce && precos.grande < 60; 
       const isComboFinal = sabor.isCombo !== undefined ? sabor.isCombo : isComboDef;
-      const isOfertaFinal = sabor.isOferta !== undefined ? sabor.isOferta : isComboDef; // Habilita para ofertas também
+      const isOfertaFinal = sabor.isOferta !== undefined ? sabor.isOferta : isComboDef;
 
       await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce, isCombo: isComboFinal, isOferta: isOfertaFinal });
       atualizadas++;
@@ -288,7 +348,6 @@ export default function App() {
     setIsUp(false);
   };
 
-  // BLINDAGEM NO SALVAMENTO
   const salvar = async (e) => {
     e.preventDefault();
     const col = getCollectionName(aba);
@@ -306,7 +365,6 @@ export default function App() {
     } catch (err) { alert("Erro ao guardar os dados: " + err.message); }
   };
 
-  // BLINDAGEM AO ATIVAR/DESATIVAR
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
     const col = getCollectionName(aba);
@@ -314,6 +372,98 @@ export default function App() {
     const newState = item.isActive === false ? true : false;
     try { await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); } 
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
+  };
+
+  // ===== FUNÇÕES E CÁLCULOS DO PDV INTERNO =====
+  const totalPDV = useMemo(() => {
+    const somaItens = pdvCart.reduce((acc, curr) => acc + Number(curr.preco || 0), 0);
+    const hasFreteGratis = pdvCart.some(i => i.tipo === 'oferta');
+    const taxaFrete = pdvEntrega === 'entrega' && !hasFreteGratis ? Number(pdvTaxa || 0) : 0;
+    return somaItens + taxaFrete;
+  }, [pdvCart, pdvEntrega, pdvTaxa]);
+
+  const addPdvItem = () => {
+    if(!pdvConfig) return;
+    let precoPizza = 0;
+    let precoBorda = 0;
+    let precoItem = 0;
+    let name = '';
+
+    if (pdvConfig.tipo === 'pizza') {
+        const listaPrecos = Array.isArray(pdvSelS) && pdvSelS.length > 0 ? pdvSelS.map(x => getPrecoSabor(x, pdvConfig.tamanho.id)) : [0];
+        precoPizza = Math.max(...listaPrecos);
+        precoBorda = pdvSelBorda ? getPrecoBorda(pdvSelBorda, pdvConfig.tamanho.id) : 0;
+        precoItem = precoPizza + precoBorda;
+        name = `Pizza ${pdvConfig.tamanho.name}`;
+    } else if (pdvConfig.tipo === 'combo') {
+        precoItem = pdvConfig.item.price;
+        name = pdvConfig.item.name;
+    } else if (pdvConfig.tipo === 'oferta') {
+        precoItem = pdvConfig.item.price;
+        name = pdvConfig.item.name;
+    }
+
+    setPdvCart([...pdvCart, {
+        id: Date.now(),
+        tipo: pdvConfig.tipo,
+        name: name,
+        tamanho: pdvConfig.tamanho,
+        sabores: pdvSelS,
+        borda: pdvSelBorda ? { ...pdvSelBorda, precoVendido: precoBorda } : null,
+        bebidasCombo: pdvSelBebidas,
+        precoPizza: precoPizza,
+        preco: precoItem,
+        qtd: 1
+    }]);
+
+    setPdvConfig(null); setPdvSelS([]); setPdvSelBorda(null); setPdvSelBebidas([]);
+  };
+
+  const handlePdvDrinkQtd = (bebida, delta) => {
+    const existingIdx = pdvCart.findIndex(c => c.tipo === 'bebida' && c.itemId === bebida.id);
+    if (existingIdx >= 0) {
+      const newCart = [...pdvCart];
+      const newQtd = newCart[existingIdx].qtd + delta;
+      if (newQtd <= 0) newCart.splice(existingIdx, 1);
+      else {
+        newCart[existingIdx].qtd = newQtd;
+        newCart[existingIdx].preco = newQtd * (newCart[existingIdx].precoBase || bebida.price);
+      }
+      setPdvCart(newCart);
+    } else if (delta > 0) {
+      setPdvCart([...pdvCart, { 
+        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+      }]);
+    }
+  };
+
+  const lancarPedidoPDV = async () => {
+    if(pdvCart.length === 0) return alert("Carrinho vazio! Adicione algum produto.");
+    if(!pdvNome.trim()) return alert("Digite o nome do cliente.");
+
+    const novoPedido = {
+      items: pdvCart,
+      total: totalPDV,
+      entrega: pdvEntrega,
+      end: pdvEntrega === 'entrega' ? { rua: pdvEnd, num: '', bairro: '', ref: '', distancia: 0, taxaCobrada: pdvCart.some(i => i.tipo === 'oferta') ? 0 : Number(pdvTaxa || 0) } : {},
+      pag: pdvPag,
+      troco: pdvTroco,
+      obs: pdvObs,
+      freteGratis: pdvCart.some(i => i.tipo === 'oferta'),
+      timestamp: Date.now(),
+      status: 'pendente',
+      userId: 'balcao_pdv',
+      clientName: pdvNome,
+      clientPhone: pdvTel || 'Balcão'
+    };
+
+    try {
+      await addDoc(collection(db, 'pedidos'), novoPedido);
+      alert("Pedido lançado com sucesso!");
+      setPdvCart([]); setPdvNome(''); setPdvTel(''); setPdvEnd(''); setPdvTaxa(''); setPdvObs(''); setPdvTroco(''); setPdvEntrega('entrega');
+    } catch (e) {
+      alert("Erro ao lançar pedido.");
+    }
   };
 
   const renderPedidoCard = (p) => {
@@ -353,7 +503,7 @@ export default function App() {
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
           <div>
             {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
-            {p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end.taxaCobrada || 0).toFixed(2)}</span>}
+            {p.entrega === 'entrega' && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end?.distancia} km | Taxa: R$ {p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end?.taxaCobrada || 0).toFixed(2)}</span>}
           </div>
         </div>
         
@@ -383,7 +533,7 @@ export default function App() {
                   <span>R$ {Number(it.borda.precoVendido || 0).toFixed(2)}</span>
                 </div>
               )}
-              {(it.tipo === 'pizza' && it.borda) || it.tipo === 'combo' || it.tipo === 'oferta' || it.qtd > 1 ? (
+              {(it.borda || it.tipo === 'combo' || it.tipo === 'oferta' || it.qtd > 1) ? (
                 <div className="flex justify-end text-[10px] text-yellow-600 font-black mt-1">
                   Subtotal: R$ {Number(it.preco || 0).toFixed(2)}
                 </div>
@@ -394,7 +544,7 @@ export default function App() {
 
         {p.obs && (
           <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-200 relative z-10">
-            <span className="text-[9px] font-black uppercase text-yellow-700 block mb-1 flex items-center gap-1"><Flame size={12}/> Observação do Cliente:</span>
+            <span className="text-[9px] font-black uppercase text-yellow-700 block mb-1 flex items-center gap-1"><Flame size={12}/> Observação:</span>
             <span className="text-xs font-bold text-gray-800 italic">{p.obs}</span>
           </div>
         )}
@@ -418,19 +568,6 @@ export default function App() {
     );
   };
 
-  if (!hasPerm) return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 text-center">
-      <div className="bg-gray-900 p-8 rounded-[40px] border border-gray-800 shadow-2xl">
-        <img src={cfg.logo} className="w-24 h-24 rounded-full mx-auto border-2 border-yellow-500 mb-6 object-cover shadow-lg"/>
-        <h1 className="text-white font-black italic mb-6 uppercase tracking-widest text-xl">A Grandonna Admin</h1>
-        <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-xl active:scale-95">
-          <img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar com Google
-        </button>
-      </div>
-    </div>
-  );
-
-  // BLINDAGEM: Retorna a lista exata para evitar vazamento visual
   const getTabelaAtual = () => {
     switch(aba) {
       case 'sabores': return sabores;
@@ -444,14 +581,28 @@ export default function App() {
     }
   };
 
+  if (!hasPerm) return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-4 text-center">
+      <div className="bg-gray-900 p-8 rounded-[40px] border border-gray-800 shadow-2xl">
+        <img src={cfg.logo} className="w-24 h-24 rounded-full mx-auto border-2 border-yellow-500 mb-6 object-cover shadow-lg"/>
+        <h1 className="text-white font-black italic mb-6 uppercase tracking-widest text-xl">A Grandonna Admin</h1>
+        <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-xl active:scale-95">
+          <img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar com Google
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {['pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
+          {/* ABA PDV ADICIONADA COMO PRIMEIRA OPÇÃO */}
+          {['pdv', 'pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
+                {m === 'pdv' && <Calculator size={16}/>}
                 {m === 'pedidos' && <ClipboardList size={16}/>}
                 {m === 'historico' && <History size={16}/>}
                 {m === 'sabores' && <Pizza size={16}/>}
@@ -463,7 +614,7 @@ export default function App() {
                 {m === 'equipe' && <Users size={16}/>}
                 {m === 'banners' && <ImageIcon size={16}/>}
                 {m === 'sistema' && <Settings size={16}/>}
-                {m}
+                {m === 'pdv' ? 'PDV / NOVO PEDIDO' : m}
               </div>
               {m === 'pedidos' && pedidos.filter(p => p.status === 'pendente').length > 0 && (
                 <span className="bg-white text-red-600 px-2 rounded-full animate-bounce font-bold">
@@ -477,26 +628,168 @@ export default function App() {
       </aside>
 
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
-        <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
-          <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
-          {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'equipe'].includes(aba) && (
-            <button onClick={() => {
-              if (aba === 'equipe' && !isMst) {
-                const p = prompt("Senha Master:");
-                if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
-              }
-              setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false, isCombo: false, isOferta: false } :
-                aba === 'bordas' ? { name: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, isActive: true } :
-                aba === 'combos' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', qtdBebidas: 1, img: '', isActive: true } :
-                aba === 'ofertas' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', img: '', isActive: true } :
-                aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true, isCombo: false } :
-                aba === 'equipe' ? { nome: '', email: '' } :
-                { title: '', imageUrl: '' }
-              );
-            }} className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-green-700 active:scale-95 transition-all">Novo {aba}</button>
-          )}
-        </header>
+        
+        {/* TELA DE PDV (PONTO DE VENDA) */}
+        {aba === 'pdv' && (
+          <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-80px)]">
+            {/* LADO ESQUERDO: CARDÁPIO */}
+            <div className="flex-1 bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
+               <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
+               
+               <div className="flex gap-2 border-b border-gray-100 pb-4 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                 {['tradicionais', 'doces', 'combos', 'ofertas', 'bebidas'].map(t => (
+                   <button key={t} onClick={()=>setPdvAba(t)} className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                     {t}
+                   </button>
+                 ))}
+               </div>
+
+               <div className="flex-1 overflow-y-auto pr-2 grid gap-3 align-top content-start">
+                  {/* Pizzas Tradicionais e Doces: Mostra Tamanhos */}
+                  {['tradicionais', 'doces'].includes(pdvAba) && tamanhos.map(t => (
+                     <div key={t.id} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', tamanho: t, maxFlavors: t.maxFlavors, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
+                        <div className="flex items-center gap-4"><span className="text-3xl">{t.icon}</span><div><h4 className="font-black text-lg text-gray-800 uppercase">{t.name} {pdvAba === 'doces' ? 'Doce' : ''}</h4><p className="text-xs text-gray-500 font-bold">{t.description}</p></div></div>
+                        <Plus size={24} className="text-gray-300 group-hover:text-red-500"/>
+                     </div>
+                  ))}
+
+                  {/* Combos */}
+                  {pdvAba === 'combos' && combos.map(c => {
+                     const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
+                     return (
+                       <div key={c.id} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
+                            <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
+                            <p className="text-xs text-purple-600 font-bold mt-1">R$ {Number(c.price || 0).toFixed(2)}</p>
+                          </div>
+                          <Plus size={24} className="text-purple-300 group-hover:text-purple-600"/>
+                       </div>
+                     )
+                  })}
+
+                  {/* Ofertas */}
+                  {pdvAba === 'ofertas' && ofertas.map(o => {
+                     const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
+                     return (
+                       <div key={o.id} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
+                            <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
+                            <p className="text-xs text-green-700 font-bold mt-1">R$ {Number(o.price || 0).toFixed(2)}</p>
+                          </div>
+                          <Plus size={24} className="text-green-300 group-hover:text-green-600"/>
+                       </div>
+                     )
+                  })}
+
+                  {/* Bebidas */}
+                  {pdvAba === 'bebidas' && bebidas.map(b => (
+                     <div key={b.id} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
+                        <div>
+                          <h4 className="font-black text-gray-800 uppercase">{b.name}</h4>
+                          <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <button onClick={() => handlePdvDrinkQtd(b, -1)} className="w-10 h-10 bg-gray-200 rounded-xl text-gray-600 font-black flex items-center justify-center hover:bg-gray-300"><Minus size={18}/></button>
+                           <button onClick={() => handlePdvDrinkQtd(b, 1)} className="w-10 h-10 bg-blue-600 rounded-xl text-white font-black flex items-center justify-center hover:bg-blue-700 shadow-md shadow-blue-500/30"><Plus size={18}/></button>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+
+            {/* LADO DIREITO: CARRINHO E LANÇAMENTO */}
+            <div className="w-full xl:w-[450px] bg-gray-900 p-6 rounded-[40px] shadow-2xl border border-gray-800 flex flex-col h-full overflow-hidden">
+               <h2 className="text-2xl font-black italic uppercase mb-4 text-white">Resumo do Pedido</h2>
+               
+               {/* Lista do Carrinho PDV */}
+               <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
+                  {pdvCart.map((i, idx) => (
+                    <div key={idx} className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 pr-2">
+                          <p className="font-bold text-white text-sm">{(i.qtd && i.qtd > 1) ? `${i.qtd}x ` : ''}{i.name}</p>
+                          {i.sabores && i.sabores.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{i.sabores.map(s => s.name).join(' + ')}</p>}
+                          {i.bebidasCombo && i.bebidasCombo.length > 0 && <p className="text-[10px] text-purple-400 italic mt-0.5">+ {i.bebidasCombo.map(b => b.name).join(', ')}</p>}
+                          {i.borda && <p className="text-[10px] text-orange-400 italic mt-0.5">+ Borda: {i.borda.name}</p>}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-yellow-500 font-black text-sm mb-2">R$ {Number(i.preco || 0).toFixed(2)}</p>
+                          <button onClick={() => setPdvCart(pdvCart.filter((_, filterIdx) => filterIdx !== idx))} className="text-red-500 hover:text-red-400 p-1 bg-red-500/10 rounded-lg"><Trash2 size={14}/></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {pdvCart.length === 0 && <p className="text-center text-gray-600 font-bold uppercase mt-10">Carrinho Vazio</p>}
+               </div>
+
+               {/* Campos do Cliente e Fechamento */}
+               <div className="space-y-3 pt-4 border-t border-gray-800">
+                 <div className="flex gap-2">
+                   <input placeholder="Nome do Cliente" value={pdvNome} onChange={e=>setPdvNome(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
+                   <input placeholder="WhatsApp" value={pdvTel} onChange={e=>setPdvTel(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
+                 </div>
+                 
+                 <div className="flex bg-black p-1 rounded-xl border border-gray-700">
+                   <button onClick={()=>setPdvEntrega('entrega')} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${pdvEntrega === 'entrega' ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Delivery</button>
+                   <button onClick={()=>setPdvEntrega('retirada')} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${pdvEntrega === 'retirada' ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>Balcão</button>
+                 </div>
+
+                 {pdvEntrega === 'entrega' && (
+                   <div className="flex gap-2">
+                     <input placeholder="Endereço Completo (Rua, Nº, Bairro)" value={pdvEnd} onChange={e=>setPdvEnd(e.target.value)} className="flex-[3] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>
+                     <input type="number" placeholder="Taxa R$" value={pdvTaxa} onChange={e=>setPdvTaxa(e.target.value)} disabled={pdvCart.some(i => i.tipo === 'oferta')} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-black outline-none focus:border-red-500 text-xs disabled:opacity-50"/>
+                   </div>
+                 )}
+
+                 <div className="flex gap-2">
+                   <select value={pdvPag} onChange={e=>setPdvPag(e.target.value)} className="flex-[2] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs">
+                     <option value="dinheiro">Dinheiro</option>
+                     <option value="maquininha">Maquininha (Cartão)</option>
+                     <option value="pix_app">PIX</option>
+                   </select>
+                   {pdvPag === 'dinheiro' && <input placeholder="Troco para R$" value={pdvTroco} onChange={e=>setPdvTroco(e.target.value)} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>}
+                 </div>
+
+                 <input placeholder="Observação (Ex: Sem cebola, etc)" value={pdvObs} onChange={e=>setPdvObs(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-yellow-500 font-bold outline-none focus:border-yellow-500 text-xs"/>
+
+                 <div className="pt-2 flex items-center justify-between">
+                    <span className="text-gray-400 font-black uppercase text-xs">Total:</span>
+                    <span className="text-2xl font-black text-green-500">R$ {Number(totalPDV || 0).toFixed(2)}</span>
+                 </div>
+
+                 <button onClick={lancarPedidoPDV} className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest flex justify-center items-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-600/20">
+                   <Send size={18}/> Lançar e Imprimir
+                 </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* OUTRAS ABAS DO ADMIN */}
+        {aba !== 'pdv' && (
+          <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
+            {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'equipe'].includes(aba) && (
+              <button onClick={() => {
+                if (aba === 'equipe' && !isMst) {
+                  const p = prompt("Senha Master:");
+                  if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
+                }
+                setEdit(
+                  aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false, isCombo: false, isOferta: false } :
+                  aba === 'bordas' ? { name: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, isActive: true } :
+                  aba === 'combos' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', qtdBebidas: 1, img: '', isActive: true } :
+                  aba === 'ofertas' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', img: '', isActive: true } :
+                  aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true, isCombo: false } :
+                  aba === 'equipe' ? { nome: '', email: '' } :
+                  { title: '', imageUrl: '' }
+                );
+              }} className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-green-700 active:scale-95 transition-all">Novo {aba}</button>
+            )}
+          </header>
+        )}
 
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -524,7 +817,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TABELAS DE PRODUTOS BLINDADAS */}
         {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -560,21 +852,18 @@ export default function App() {
                           </span>
                         )}
                         
-                        {/* ETIQUETA COMBO */}
                         {['sabores', 'bebidas'].includes(aba) && it.isCombo && (
                           <span className="bg-purple-100 text-purple-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-purple-200 flex items-center gap-1">
                             <Package size={10}/> Combo
                           </span>
                         )}
 
-                        {/* ETIQUETA OFERTA FRETE GRÁTIS NO SABOR */}
                         {aba === 'sabores' && it.isOferta && (
                           <span className="bg-green-100 text-green-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-green-200 flex items-center gap-1">
                             <Ticket size={10}/> Oferta
                           </span>
                         )}
 
-                        {/* ETIQUETA OFERTA NA ABA DE OFERTAS */}
                         {aba === 'ofertas' && it.isActive !== false && (
                           <span className="bg-green-100 text-green-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-green-200 flex items-center gap-1">
                             <Ticket size={10}/> Entrega Grátis
@@ -807,8 +1096,112 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE EDIÇÃO */}
-      {edit && (
+      {/* MODAL DE EDIÇÃO E LANÇAMENTO PDV (SE EXISTIR CONF) */}
+      {pdvConfig && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-[200]">
+          <div className="bg-white rounded-[40px] w-full max-w-lg p-8 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-4">
+              <h2 className="text-xl font-black uppercase italic text-gray-800">
+                {pdvConfig.tipo === 'pizza' ? `Montar Pizza ${pdvConfig.tamanho?.name}` : pdvConfig.item?.name}
+              </h2>
+              <button onClick={() => { setPdvConfig(null); setPdvSelS([]); setPdvSelBorda(null); setPdvSelBebidas([]); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+              {/* ESCOLHA DE SABORES */}
+              <div>
+                <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
+                  <span>Sabores ({pdvSelS.length} / {pdvConfig.maxFlavors})</span>
+                  {pdvSelS.length === pdvConfig.maxFlavors && <CheckCircle2 size={16} className="text-green-500"/>}
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {(() => {
+                    let lista = [];
+                    if (pdvConfig.tipo === 'combo') lista = sabores.filter(s => s.isCombo);
+                    else if (pdvConfig.tipo === 'oferta') lista = sabores.filter(s => s.isOferta);
+                    else lista = sabores.filter(s => pdvConfig.isDoce ? isPizzaDoce(s) : !isPizzaDoce(s));
+
+                    const validos = lista.filter(s => pdvConfig.tipo !== 'pizza' || getPrecoSabor(s, pdvConfig.tamanho?.id) > 0);
+
+                    return validos.map(s => {
+                      const isSel = pdvSelS.some(x => x.id === s.id);
+                      const isFull = !isSel && pdvSelS.length >= pdvConfig.maxFlavors;
+                      return (
+                        <div key={s.id} onClick={() => !isFull && (isSel ? setPdvSelS(pdvSelS.filter(x=>x.id!==s.id)) : setPdvSelS([...pdvSelS, s]))} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-red-500 bg-red-50' : isFull ? 'opacity-40 border-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <p className={`text-[10px] font-black uppercase leading-tight ${isSel ? 'text-red-600' : 'text-gray-700'}`}>{s.name}</p>
+                          {pdvConfig.tipo === 'pizza' && <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoSabor(s, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>}
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+
+              {/* ESCOLHA DE BORDA (SÓ PARA PIZZA NORMAL) */}
+              {pdvConfig.tipo === 'pizza' && pdvSelS.length > 0 && bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).length > 0 && (
+                <div>
+                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3">Borda Recheada</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div onClick={() => setPdvSelBorda(null)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${!pdvSelBorda ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
+                      <p className={`text-[10px] font-black uppercase ${!pdvSelBorda ? 'text-orange-600' : 'text-gray-700'}`}>Sem Borda</p>
+                    </div>
+                    {bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).map(b => {
+                      const isSel = pdvSelBorda?.id === b.id;
+                      return (
+                        <div key={b.id} onClick={() => setPdvSelBorda(b)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <p className={`text-[10px] font-black uppercase ${isSel ? 'text-orange-600' : 'text-gray-700'}`}>{b.name}</p>
+                          <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoBorda(b, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* BEBIDAS (SÓ PARA COMBO) */}
+              {pdvConfig.tipo === 'combo' && pdvConfig.maxBebidas > 0 && pdvSelS.length > 0 && (
+                <div>
+                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
+                    <span>Bebidas Inclusas ({pdvSelBebidas.length} / {pdvConfig.maxBebidas})</span>
+                    {pdvSelBebidas.length === pdvConfig.maxBebidas && <CheckCircle2 size={16} className="text-purple-500"/>}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {bebidas.filter(b => b.isCombo).map(b => {
+                      const qtd = pdvSelBebidas.filter(x => x.id === b.id).length;
+                      return (
+                        <div key={b.id} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50 flex flex-col justify-between items-center gap-2">
+                          <p className="text-[10px] font-black text-gray-700 uppercase text-center leading-tight">{b.name}</p>
+                          <div className="flex items-center gap-2">
+                            {qtd > 0 && <button onClick={() => {
+                              const idx = pdvSelBebidas.findIndex(x => x.id === b.id);
+                              if(idx !== -1) { const n = [...pdvSelBebidas]; n.splice(idx, 1); setPdvSelBebidas(n); }
+                            }} className="w-6 h-6 bg-gray-300 rounded text-gray-700 font-bold flex justify-center items-center"><Minus size={12}/></button>}
+                            {qtd > 0 && <span className="text-[10px] font-black text-purple-600">{qtd}</span>}
+                            <button onClick={() => {
+                              if(pdvSelBebidas.length < pdvConfig.maxBebidas) setPdvSelBebidas([...pdvSelBebidas, b]);
+                            }} disabled={pdvSelBebidas.length >= pdvConfig.maxBebidas} className="w-6 h-6 bg-purple-600 rounded text-white font-bold flex justify-center items-center disabled:opacity-50"><Plus size={12}/></button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={addPdvItem}
+              disabled={pdvSelS.length === 0 || (pdvConfig.tipo === 'combo' && pdvSelBebidas.length < pdvConfig.maxBebidas)}
+              className="mt-6 w-full bg-red-600 text-white p-4 rounded-[20px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> Adicionar ao Pedido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PADRÃO DE EDIÇÃO DAS OUTRAS ABAS */}
+      {edit && !pdvConfig && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black uppercase italic border-b pb-4 flex justify-between items-center text-gray-800 tracking-tighter">Configurar {aba} <button type="button" onClick={() => setEdit(null)}><X size={30} className="text-gray-300 hover:text-black"/></button></h2>
@@ -828,7 +1221,6 @@ export default function App() {
               
               {['sabores', 'combos', 'ofertas'].includes(aba) && <textarea placeholder={aba === 'combos' ? "Descrição do Combo..." : aba === 'ofertas' ? "Descrição da Oferta..." : "Ingredientes..."} className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
-              {/* CAIXINHAS (SABORES) - AGORA SÃO 4 COM A OFERTA FRETE GRÁTIS */}
               {aba === 'sabores' && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <label className="flex flex-col items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-2xl cursor-pointer hover:bg-red-100 transition-colors text-center">
@@ -853,7 +1245,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* CAIXINHAS (BEBIDAS) */}
               {aba === 'bebidas' && (
                 <label className="flex items-center justify-center gap-2 p-4 bg-purple-50 border border-purple-100 rounded-3xl cursor-pointer hover:bg-purple-100 transition-colors text-center">
                   <input type="checkbox" className="w-5 h-5 accent-purple-600 rounded" checked={edit.isCombo || false} onChange={e => setEdit({ ...edit, isCombo: e.target.checked })} />
@@ -861,7 +1252,6 @@ export default function App() {
                 </label>
               )}
 
-              {/* CONFIGURAÇÕES ESPECIAIS DE COMBOS */}
               {aba === 'combos' && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -887,7 +1277,6 @@ export default function App() {
                 </>
               )}
 
-              {/* CONFIGURAÇÕES DE OFERTAS (FRETE GRÁTIS) */}
               {aba === 'ofertas' && (
                 <>
                   <div>
