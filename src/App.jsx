@@ -87,7 +87,6 @@ function MainApp() {
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
-  const [tamanhos] = useState(TAMANHOS_FIXOS); // CORREÇÃO: Variável de tamanhos adicionada!
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
@@ -694,7 +693,7 @@ function MainApp() {
                      if(!c) return null;
                      const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
                      return (
-                       <div key={`combo-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={c.id || `combo-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
@@ -709,7 +708,7 @@ function MainApp() {
                      if(!o) return null;
                      const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
                      return (
-                       <div key={`oferta-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={o.id || `oferta-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
@@ -723,7 +722,7 @@ function MainApp() {
                   {pdvAba === 'bebidas' && Array.isArray(bebidas) && bebidas.map((b, idx) => {
                      if(!b) return null;
                      return (
-                     <div key={`bebida-item-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
+                     <div key={b.id || `bebida-item-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
                         <div>
                           <h4 className="font-black text-gray-800 uppercase">{b.name}</h4>
                           <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
@@ -1247,6 +1246,112 @@ function MainApp() {
             
             <button type="submit" disabled={isUp} className="w-full bg-green-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-green-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
           </form>
+        </div>
+      )}
+
+      {/* MODAL DO PDV - DEVE APARECER QUANDO CLICAR NO CARD NO PDV */}
+      {pdvConfig && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-[200]">
+          <div className="bg-white rounded-[40px] w-full max-w-lg p-8 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-4">
+              <h2 className="text-xl font-black uppercase italic text-gray-800">
+                {pdvConfig.tipo === 'pizza' ? `Montar Pizza ${pdvConfig.tamanho?.name || ''}` : pdvConfig.item?.name || ''}
+              </h2>
+              <button onClick={() => { setPdvConfig(null); setPdvSelS([]); setPdvSelBorda(null); setPdvSelBebidas([]); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+              {/* ESCOLHA DE SABORES */}
+              {(pdvConfig.tipo === 'pizza' || pdvConfig.tipo === 'combo' || pdvConfig.tipo === 'oferta') && (
+                <div>
+                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
+                    <span>Sabores ({pdvSelS.length} / {pdvConfig.maxFlavors})</span>
+                    {pdvSelS.length === pdvConfig.maxFlavors && <CheckCircle2 size={16} className="text-green-500"/>}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(() => {
+                      let lista = [];
+                      if (pdvConfig.tipo === 'combo') lista = sabores.filter(s => s.isCombo);
+                      else if (pdvConfig.tipo === 'oferta') lista = sabores.filter(s => s.isOferta);
+                      else lista = sabores.filter(s => pdvConfig.isDoce ? isPizzaDoce(s) : !isPizzaDoce(s));
+
+                      const validos = lista.filter(s => pdvConfig.tipo !== 'pizza' || getPrecoSabor(s, pdvConfig.tamanho?.id) > 0);
+
+                      return validos.map((s, idx) => {
+                        const isSel = pdvSelS.some(x => x.id === s.id);
+                        const isFull = !isSel && pdvSelS.length >= pdvConfig.maxFlavors;
+                        return (
+                          <div key={s.id || `sabor-${idx}`} onClick={() => !isFull && (isSel ? setPdvSelS(pdvSelS.filter(x=>x.id!==s.id)) : setPdvSelS([...pdvSelS, s]))} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-red-500 bg-red-50' : isFull ? 'opacity-40 border-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
+                            <p className={`text-[10px] font-black uppercase leading-tight ${isSel ? 'text-red-600' : 'text-gray-700'}`}>{s.name}</p>
+                            {pdvConfig.tipo === 'pizza' && <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoSabor(s, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>}
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* ESCOLHA DE BORDA (SÓ PARA PIZZA NORMAL) */}
+              {pdvConfig.tipo === 'pizza' && pdvSelS.length > 0 && bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).length > 0 && (
+                <div>
+                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3">Borda Recheada</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div onClick={() => setPdvSelBorda(null)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${!pdvSelBorda ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
+                      <p className={`text-[10px] font-black uppercase ${!pdvSelBorda ? 'text-orange-600' : 'text-gray-700'}`}>Sem Borda</p>
+                    </div>
+                    {bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).map((b, idx) => {
+                      const isSel = pdvSelBorda?.id === b.id;
+                      return (
+                        <div key={b.id || `borda-${idx}`} onClick={() => setPdvSelBorda(b)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <p className={`text-[10px] font-black uppercase ${isSel ? 'text-orange-600' : 'text-gray-700'}`}>{b.name}</p>
+                          <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoBorda(b, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* BEBIDAS (SÓ PARA COMBO) */}
+              {pdvConfig.tipo === 'combo' && pdvConfig.maxBebidas > 0 && pdvSelS.length > 0 && (
+                <div>
+                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
+                    <span>Bebidas Inclusas ({pdvSelBebidas.length} / {pdvConfig.maxBebidas})</span>
+                    {pdvSelBebidas.length === pdvConfig.maxBebidas && <CheckCircle2 size={16} className="text-purple-500"/>}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {bebidas.filter(b => b.isCombo).map((b, idx) => {
+                      const qtd = pdvSelBebidas.filter(x => x.id === b.id).length;
+                      return (
+                        <div key={b.id || `beb-${idx}`} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50 flex flex-col justify-between items-center gap-2">
+                          <p className="text-[10px] font-black text-gray-700 uppercase text-center leading-tight">{b.name}</p>
+                          <div className="flex items-center gap-2">
+                            {qtd > 0 && <button onClick={() => {
+                              const idx = pdvSelBebidas.findIndex(x => x.id === b.id);
+                              if(idx !== -1) { const n = [...pdvSelBebidas]; n.splice(idx, 1); setPdvSelBebidas(n); }
+                            }} className="w-6 h-6 bg-gray-300 rounded text-gray-700 font-bold flex justify-center items-center"><Minus size={12}/></button>}
+                            {qtd > 0 && <span className="text-[10px] font-black text-purple-600">{qtd}</span>}
+                            <button onClick={() => {
+                              if(pdvSelBebidas.length < pdvConfig.maxBebidas) setPdvSelBebidas([...pdvSelBebidas, b]);
+                            }} disabled={pdvSelBebidas.length >= pdvConfig.maxBebidas} className="w-6 h-6 bg-purple-600 rounded text-white font-bold flex justify-center items-center disabled:opacity-50"><Plus size={12}/></button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={addPdvItem}
+              disabled={pdvSelS.length === 0 || (pdvConfig.tipo === 'combo' && pdvSelBebidas.length < pdvConfig.maxBebidas)}
+              className="mt-6 w-full bg-red-600 text-white p-4 rounded-[20px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> Adicionar ao Pedido
+            </button>
+          </div>
         </div>
       )}
 
