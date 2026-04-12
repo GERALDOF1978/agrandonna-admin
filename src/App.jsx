@@ -1,8 +1,35 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Component } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle } from 'lucide-react';
+
+// SISTEMA ANTI-TELA BRANCA (ERROR BOUNDARY)
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMsg: error.toString() };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center p-10 text-center text-white font-sans">
+          <AlertTriangle size={64} className="mb-4 text-white/50" />
+          <h1 className="text-3xl font-black mb-4 uppercase italic tracking-wider">Modo de Segurança</h1>
+          <p className="mb-6 font-bold text-sm max-w-md">O sistema interceptou um dado antigo/quebrado no banco de dados e evitou a tela branca. Por favor, tire um print desta tela e envie ao suporte.</p>
+          <div className="bg-black/40 p-4 rounded-xl mb-6 font-mono text-xs text-left max-w-xl w-full overflow-auto">
+            {this.state.errorMsg}
+          </div>
+          <button onClick={() => window.location.reload()} className="bg-white text-red-600 px-8 py-4 rounded-full font-black uppercase shadow-lg active:scale-95 transition-all">Tentar Recarregar</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -55,7 +82,7 @@ const isPizzaDoce = (sabor) => {
   return docesNomes.some(p => nomeSabor.includes(p));
 };
 
-export default function App() {
+function MainApp() {
   const [user, setUser] = useState(null);
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
@@ -113,13 +140,13 @@ export default function App() {
 
   const getTabelaAtual = () => {
     switch(aba) {
-      case 'sabores': return sabores;
-      case 'bordas': return bordas;
-      case 'combos': return combos;
-      case 'ofertas': return ofertas;
-      case 'bebidas': return bebidas;
-      case 'banners': return banners;
-      case 'equipe': return equipe;
+      case 'sabores': return sabores || [];
+      case 'bordas': return bordas || [];
+      case 'combos': return combos || [];
+      case 'ofertas': return ofertas || [];
+      case 'bebidas': return bebidas || [];
+      case 'banners': return banners || [];
+      case 'equipe': return equipe || [];
       default: return [];
     }
   };
@@ -177,7 +204,7 @@ export default function App() {
         audio.play().catch(e => console.log("Áudio bloqueado."));
       }
       qtdPendentes.current = novosPendentes;
-      setPedidos(data);
+      setPedidos(data || []);
     });
 
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -190,8 +217,9 @@ export default function App() {
     
     const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => {
       if(s.exists()){
-        const data = s.data();
-        setCfg({
+        const data = s.data() || {};
+        setCfg(prev => ({
+          ...prev,
           ...data,
           taxaMinima: data.taxaMinima ?? data.taxa ?? 6,
           kmIncluso: data.kmIncluso ?? 3,
@@ -206,7 +234,7 @@ export default function App() {
           promoMeioMetro: data.promoMeioMetro ?? true, precoPromoMeioMetro: data.precoPromoMeioMetro ?? 52.90,
           promoUmMetro: data.promoUmMetro ?? true, precoPromoUmMetro: data.precoPromoUmMetro ?? 79.90,
           promoDoce: data.promoDoce ?? true, precoPromoDoce: data.precoPromoDoce ?? 53.00
-        });
+        }));
       }
     });
 
@@ -215,7 +243,7 @@ export default function App() {
 
   useEffect(() => {
     if (!hasPerm || !pedidos || pedidos.length === 0) return;
-    const ativos = [...new Set(pedidos.filter(p => p && p.userId && ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
+    const ativos = [...new Set((pedidos || []).filter(p => p && p.userId && ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
     
     const unsubs = ativos.map(uid => {
       if (!uid) return () => {};
@@ -280,6 +308,8 @@ export default function App() {
 
   const imprimirPedido = (p) => {
     if (!p) return;
+    const timeStr = p?.timestamp ? new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+    const dateStr = p?.timestamp ? new Date(p.timestamp).toLocaleDateString() : '--/--/----';
     const janela = window.open('', '', 'width=300,height=600');
     janela.document.write(`
       <html>
@@ -297,9 +327,9 @@ export default function App() {
           </style>
         </head>
         <body>
-          <h1>${cfg.topo || 'A GRANDONNA'}</h1>
+          <h1>${cfg?.topo || 'A GRANDONNA'}</h1>
           <div class="text-center margin-bot">PEDIDO #${String(p.id || '').slice(-4).toUpperCase()}</div>
-          <div class="text-center margin-bot">${new Date(p.timestamp || Date.now()).toLocaleDateString()} - ${new Date(p.timestamp || Date.now()).toLocaleTimeString()}</div>
+          <div class="text-center margin-bot">${dateStr} - ${timeStr}</div>
           <div class="divisor"></div>
           <div class="bold">CLIENTE:</div>
           <div>${p.clientName || 'Cliente'}</div>
@@ -392,7 +422,6 @@ export default function App() {
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
   };
 
-  // CÁLCULOS DO PDV
   const totalPDV = useMemo(() => {
     const somaItens = Array.isArray(pdvCart) ? pdvCart.reduce((acc, curr) => acc + Number(curr?.preco || 0), 0) : 0;
     const hasFreteGratis = Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta');
@@ -421,7 +450,7 @@ export default function App() {
         name = pdvConfig.item?.name || 'Oferta';
     }
 
-    setPdvCart([...pdvCart, {
+    setPdvCart([...(pdvCart || []), {
         id: Date.now() + Math.random(),
         tipo: pdvConfig.tipo,
         name: name,
@@ -449,7 +478,7 @@ export default function App() {
       }
       setPdvCart(newCart);
     } else if (delta > 0) {
-      setPdvCart([...pdvCart, { 
+      setPdvCart([...(pdvCart || []), { 
         id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
@@ -459,7 +488,7 @@ export default function App() {
     if(!pdvCart || pdvCart.length === 0) return alert("Carrinho vazio! Adicione algum produto.");
     if(!pdvNome.trim()) return alert("Digite o nome do cliente.");
 
-    const hasFreteGratis = pdvCart.some(i => i?.tipo === 'oferta');
+    const hasFreteGratis = Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta');
 
     const novoPedido = {
       items: pdvCart,
@@ -490,24 +519,26 @@ export default function App() {
     if (!p) return null;
     const isLatestForUser = Array.isArray(pedidos) ? pedidos.find(x => x?.userId === p?.userId)?.id === p?.id : false;
     const temAlerta = Array.isArray(alertasChat) && p?.userId ? alertasChat.includes(p.userId) && isLatestForUser : false;
+    const timeStr = p?.timestamp ? new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+    const dateStr = p?.timestamp ? new Date(p.timestamp).toLocaleDateString() : '--/--/----';
 
     return (
-      <div key={p.id || `pedido-${idx}`} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
-        {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
+      <div key={p?.id || `pedido-${idx}`} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p?.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
+        {p?.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
         
         <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
           <div>
-            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id || '').slice(-4)}</span>
-            <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p?.id || '').slice(-4)}</span>
+            <span className="text-[9px] font-bold text-gray-400">{timeStr}</span>
           </div>
           <div className="flex gap-2">
-            {p.status !== 'pendente' && (
+            {p?.status !== 'pendente' && (
               <button onClick={() => imprimirPedido(p)} className="p-2 bg-purple-50 text-purple-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="Imprimir Pedido">
                 <Printer size={14}/>
               </button>
             )}
-            <button onClick={() => window.open(`https://wa.me/55${p.clientPhone || ''}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
-            <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
+            <button onClick={() => window.open(`https://wa.me/55${p?.clientPhone || ''}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
+            <button onClick={() => setChatAberto({userId: p?.userId, clientName: p?.clientName || 'Cliente'})} 
               className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat">
               <MessageCircle size={14}/>
               {temAlerta && <span className="text-[8px] font-black uppercase tracking-widest">Nova Msg</span>}
@@ -516,20 +547,20 @@ export default function App() {
         </div>
         
         <div className="relative z-10">
-          <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p.clientName || 'Cliente sem nome'}</div>
-          <div className="text-[10px] font-bold text-gray-500">{p.clientPhone || 'Sem telefone'}</div>
+          <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p?.clientName || 'Cliente sem nome'}</div>
+          <div className="text-[10px] font-bold text-gray-500">{p?.clientPhone || 'Sem telefone'}</div>
         </div>
 
         <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
           <div>
-            {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua || ''}, ${p.end?.num || ''} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro || ''}`}
-            {p.entrega === 'entrega' && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end?.distancia || 0} km | Taxa: R$ {p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end?.taxaCobrada || 0).toFixed(2)}</span>}
+            {p?.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p?.end?.rua || ''}, ${p?.end?.num || ''} ${p?.end?.ref ? `(${p.end.ref})` : ''} - ${p?.end?.bairro || ''}`}
+            {p?.entrega === 'entrega' && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p?.end?.distancia || 0} km | Taxa: R$ {p?.freteGratis ? '0.00 (GRÁTIS)' : Number(p?.end?.taxaCobrada || 0).toFixed(2)}</span>}
           </div>
         </div>
         
         <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
-          {Array.isArray(p.items) && p.items.map((it, idxItem) => {
+          {Array.isArray(p?.items) && p.items.map((it, idxItem) => {
             if(!it) return null;
             return (
             <div key={`item-${idxItem}`} className="flex flex-col border-b border-gray-50 pb-2 last:border-0">
@@ -552,11 +583,11 @@ export default function App() {
 
               {it.borda && typeof it.borda === 'object' && (
                 <div className="flex justify-between items-center text-[9px] text-orange-500 font-bold italic leading-tight mt-1">
-                  <span>+ Borda: {it.borda.name}</span>
-                  <span>R$ {Number(it.borda.precoVendido || 0).toFixed(2)}</span>
+                  <span>+ Borda: {it.borda?.name}</span>
+                  <span>R$ {Number(it.borda?.precoVendido || 0).toFixed(2)}</span>
                 </div>
               )}
-              {(it.borda || it.tipo === 'combo' || it.tipo === 'oferta' || it.qtd > 1) ? (
+              {(it.borda || it.tipo === 'combo' || it.tipo === 'oferta' || (it.qtd && it.qtd > 1)) ? (
                 <div className="flex justify-end text-[10px] text-yellow-600 font-black mt-1">
                   Subtotal: R$ {Number(it.preco || 0).toFixed(2)}
                 </div>
@@ -565,7 +596,7 @@ export default function App() {
           )})}
         </div>
 
-        {p.obs && (
+        {p?.obs && (
           <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-200 relative z-10">
             <span className="text-[9px] font-black uppercase text-yellow-700 block mb-1 flex items-center gap-1"><Flame size={12}/> Observação:</span>
             <span className="text-xs font-bold text-gray-800 italic">{p.obs}</span>
@@ -574,19 +605,19 @@ export default function App() {
 
         <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10 mt-2">
           <span className="text-[9px] font-black uppercase text-gray-500">
-            Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : String(p.pag || '').toUpperCase()}</span>
-            {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
+            Pagamento: <span className="text-gray-800">{p?.pag === 'pix_app' ? 'PIX APP' : String(p?.pag || '').toUpperCase()}</span>
+            {p?.pag === 'dinheiro' && p?.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
           </span>
         </div>
         
         <div className="grid grid-cols-2 gap-1.5 mt-1 relative z-10">
-          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
-          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
-          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
-          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'pendente' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p?.status === 'pendente' ? 'bg-red-600 text-white shadow-md shadow-red-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Pendente</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'preparando' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p?.status === 'preparando' ? 'bg-yellow-500 text-white shadow-md shadow-yellow-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Cozinha</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'saiu_entrega' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p?.status === 'saiu_entrega' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Entrega</button>
+          <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p?.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
         </div>
         
-        <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {Number(p.total || 0).toFixed(2)}</div>
+        <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {Number(p?.total || 0).toFixed(2)}</div>
       </div>
     );
   };
@@ -594,7 +625,7 @@ export default function App() {
   if (!hasPerm) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 text-center">
       <div className="bg-gray-900 p-8 rounded-[40px] border border-gray-800 shadow-2xl">
-        <img src={cfg.logo} className="w-24 h-24 rounded-full mx-auto border-2 border-yellow-500 mb-6 object-cover shadow-lg"/>
+        <img src={cfg?.logo || LOGO} className="w-24 h-24 rounded-full mx-auto border-2 border-yellow-500 mb-6 object-cover shadow-lg"/>
         <h1 className="text-white font-black italic mb-6 uppercase tracking-widest text-xl">A Grandonna Admin</h1>
         <button onClick={() => signInWithPopup(auth, provider)} className="w-full bg-white text-black p-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-xl active:scale-95">
           <img src="https://www.google.com/favicon.ico" className="w-5"/> Entrar com Google
@@ -606,7 +637,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
-        <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
+        <img src={cfg?.logo || LOGO} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
           {['pdv', 'pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
@@ -638,7 +669,6 @@ export default function App() {
 
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
         
-        {/* TELA DE PDV (PONTO DE VENDA) BLINDADA */}
         {aba === 'pdv' && (
           <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-80px)]">
             <div className="flex-1 bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
@@ -829,7 +859,7 @@ export default function App() {
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
                 <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Preços / Informação</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
-              <tbody>{getTabelaAtual().map((it, idx) => {
+              <tbody>{(getTabelaAtual() || []).map((it, idx) => {
                 if(!it) return null;
                 return (
                 <tr key={it.id || `tab-${idx}`} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
@@ -966,15 +996,15 @@ export default function App() {
         {aba === 'sistema' && (
           <div className="max-w-2xl bg-white p-10 rounded-[50px] shadow-2xl border border-gray-100 space-y-6 mx-auto">
              <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                <img src={cfg.logo} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
+                <img src={cfg?.logo || LOGO} className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover" />
                 <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all uppercase flex items-center gap-2">
                   {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} Trocar Logo
                   <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, logo: url }))} />
                 </label>
              </div>
              
-             <button onClick={() => setCfg({ ...cfg, aberto: !cfg.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
-               <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
+             <button onClick={() => setCfg({ ...cfg, aberto: !cfg?.aberto })} className={`w-full p-6 rounded-3xl font-black uppercase transition-all shadow-lg ${cfg?.aberto ? 'bg-green-600 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-100'}`}>
+               <Power size={22} className="inline mr-2"/> {cfg?.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
@@ -982,7 +1012,7 @@ export default function App() {
                 <div>
                   <textarea 
                     className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500 resize-none h-24" 
-                    value={cfg.msgFechado} 
+                    value={cfg?.msgFechado || ''} 
                     onChange={e => setCfg({ ...cfg, msgFechado: e.target.value })} 
                     placeholder="Ex: Estamos fechados. Abriremos às 18h."
                   />
@@ -994,14 +1024,14 @@ export default function App() {
                 <h3 className="font-black text-xs text-blue-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><MapPin size={14}/> Configuração de Frete por KM</h3>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP da Loja</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.cepLoja} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Nº da Loja</label><input type="text" className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg.numLoja} onChange={e => setCfg({ ...cfg, numLoja: e.target.value })} placeholder="Ex: 3021"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">CEP da Loja</label><input className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg?.cepLoja || ''} onChange={e => setCfg({ ...cfg, cepLoja: e.target.value })} placeholder="Ex: 13500000"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Nº da Loja</label><input type="text" className="w-full p-4 bg-blue-50 border border-blue-100 rounded-[24px] font-bold outline-none focus:border-blue-500 text-blue-900" value={cfg?.numLoja || ''} onChange={e => setCfg({ ...cfg, numLoja: e.target.value })} placeholder="Ex: 3021"/></div>
                 </div>
                 
                 <div className="grid grid-cols-3 gap-2">
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.taxaMinima} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso (Mínima)</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.kmIncluso} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
-                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor por KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg.valorKm} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Taxa Mínima</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg?.taxaMinima || 0} onChange={e => setCfg({ ...cfg, taxaMinima: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">KM Incluso</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg?.kmIncluso || 0} onChange={e => setCfg({ ...cfg, kmIncluso: parseFloat(e.target.value) })}/></div>
+                  <div><label className="text-[9px] font-black uppercase text-gray-400 px-2 mb-1 block text-center">Valor KM Extra</label><input type="number" step="0.5" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none text-center" value={cfg?.valorKm || 0} onChange={e => setCfg({ ...cfg, valorKm: parseFloat(e.target.value) })}/></div>
                 </div>
              </div>
 
@@ -1015,7 +1045,7 @@ export default function App() {
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-purple-500 uppercase text-center mb-2 flex justify-center items-center gap-1"><ImgIcon size={14}/> Splash Screen (Tela de Aviso)</h3>
-                {cfg.splashImg && (
+                {cfg?.splashImg && (
                   <div className="flex justify-center"><img src={cfg.splashImg} className="w-full max-w-[200px] h-auto rounded-2xl shadow-md border border-gray-200" /></div>
                 )}
                 <div className="flex items-center gap-4 justify-between bg-gray-50 p-4 rounded-3xl border border-gray-100">
@@ -1024,7 +1054,7 @@ export default function App() {
                     <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setCfg({ ...cfg, splashImg: url }))} />
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg.splashAtivo} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} />
+                    <input type="checkbox" className="w-5 h-5 accent-purple-600" checked={cfg?.splashAtivo || false} onChange={e => setCfg({ ...cfg, splashAtivo: e.target.checked })} />
                     <span className="font-bold text-xs uppercase text-purple-600">Ativar Splash</span>
                   </label>
                 </div>
@@ -1035,50 +1065,50 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoBroto} onChange={e => setCfg({ ...cfg, promoBroto: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg?.promoBroto || false} onChange={e => setCfg({ ...cfg, promoBroto: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-gray-700">Promo Broto</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg.precoPromoBroto} onChange={e => setCfg({ ...cfg, precoPromoBroto: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg?.precoPromoBroto || 0} onChange={e => setCfg({ ...cfg, precoPromoBroto: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
                   
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGrande} onChange={e => setCfg({ ...cfg, promoGrande: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg?.promoGrande || false} onChange={e => setCfg({ ...cfg, promoGrande: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-gray-700">Promo Grande</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg.precoPromoGrande} onChange={e => setCfg({ ...cfg, precoPromoGrande: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg?.precoPromoGrande || 0} onChange={e => setCfg({ ...cfg, precoPromoGrande: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
                   
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoGigante} onChange={e => setCfg({ ...cfg, promoGigante: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg?.promoGigante || false} onChange={e => setCfg({ ...cfg, promoGigante: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-gray-700">Promo Gigante</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg.precoPromoGigante} onChange={e => setCfg({ ...cfg, precoPromoGigante: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg?.precoPromoGigante || 0} onChange={e => setCfg({ ...cfg, precoPromoGigante: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
 
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoMeioMetro} onChange={e => setCfg({ ...cfg, promoMeioMetro: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg?.promoMeioMetro || false} onChange={e => setCfg({ ...cfg, promoMeioMetro: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-gray-700">Promo 1/2 Metro</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg.precoPromoMeioMetro} onChange={e => setCfg({ ...cfg, precoPromoMeioMetro: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg?.precoPromoMeioMetro || 0} onChange={e => setCfg({ ...cfg, precoPromoMeioMetro: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
 
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg.promoUmMetro} onChange={e => setCfg({ ...cfg, promoUmMetro: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-orange-500" checked={cfg?.promoUmMetro || false} onChange={e => setCfg({ ...cfg, promoUmMetro: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-gray-700">Promo 1 Metro</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg.precoPromoUmMetro} onChange={e => setCfg({ ...cfg, precoPromoUmMetro: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-orange-500 text-orange-600" value={cfg?.precoPromoUmMetro || 0} onChange={e => setCfg({ ...cfg, precoPromoUmMetro: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
 
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
-                      <input type="checkbox" className="w-5 h-5 accent-pink-500" checked={cfg.promoDoce} onChange={e => setCfg({ ...cfg, promoDoce: e.target.checked })} /> 
+                      <input type="checkbox" className="w-5 h-5 accent-pink-500" checked={cfg?.promoDoce || false} onChange={e => setCfg({ ...cfg, promoDoce: e.target.checked })} /> 
                       <span className="font-bold text-[10px] uppercase text-pink-600">Promo Doce (Gra.)</span>
                     </label>
-                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-pink-500 text-pink-600" value={cfg.precoPromoDoce} onChange={e => setCfg({ ...cfg, precoPromoDoce: parseFloat(e.target.value) })} placeholder="Preço"/>
+                    <input type="number" step="0.01" className="w-full p-2 bg-white border border-gray-200 rounded-xl font-bold outline-none text-xs focus:border-pink-500 text-pink-600" value={cfg?.precoPromoDoce || 0} onChange={e => setCfg({ ...cfg, precoPromoDoce: parseFloat(e.target.value) })} placeholder="Preço"/>
                   </div>
                 </div>
                 
@@ -1090,10 +1120,10 @@ export default function App() {
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Outras Configurações</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Horário Abertura</label><input type="time" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.horaAbre} onChange={e => setCfg({ ...cfg, horaAbre: e.target.value })}/></div>
-                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Título da Impressão</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.topo} onChange={e => setCfg({ ...cfg, topo: e.target.value })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg?.zap || ''} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg?.tempo || 0} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Horário Abertura</label><input type="time" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg?.horaAbre || ''} onChange={e => setCfg({ ...cfg, horaAbre: e.target.value })}/></div>
+                  <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Título da Impressão</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg?.topo || ''} onChange={e => setCfg({ ...cfg, topo: e.target.value })}/></div>
                 </div>
              </div>
 
@@ -1104,7 +1134,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE EDIÇÃO */}
+      {/* MODAL DE EDIÇÃO (APENAS PARA ABAS COMUNS) */}
       {edit && !pdvConfig && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -1112,7 +1142,7 @@ export default function App() {
             
             {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                 {aba !== 'bordas' && <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />}
+                 {aba !== 'bordas' && <img src={edit.img || edit.imageUrl || cfg?.logo || LOGO} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />}
                  <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center uppercase">
                    {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setEdit({ ...edit, [aba === 'banners' ? 'imageUrl' : 'img']: url }))} />
@@ -1121,7 +1151,7 @@ export default function App() {
             )}
             
             <div className="space-y-4">
-              <input placeholder="Nome / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.name || edit.title || edit.nome} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
+              <input placeholder="Nome / Título" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.name || edit.title || edit.nome || ''} onChange={e => setEdit({ ...edit, [aba === 'banners' ? 'title' : aba === 'equipe' ? 'nome' : 'name']: e.target.value })} required />
               
               {['sabores', 'combos', 'ofertas'].includes(aba) && <textarea placeholder={aba === 'combos' ? "Descrição do Combo..." : aba === 'ofertas' ? "Descrição da Oferta..." : "Ingredientes..."} className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
@@ -1161,7 +1191,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] uppercase font-black text-gray-400 px-3">Tamanho da Pizza</label>
-                      <select className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.tamanhoId} onChange={e => setEdit({...edit, tamanhoId: e.target.value})}>
+                      <select className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.tamanhoId || 'gigante'} onChange={e => setEdit({...edit, tamanhoId: e.target.value})}>
                         <option value="broto">Broto</option>
                         <option value="grande">Grande</option>
                         <option value="gigante">Gigante</option>
@@ -1171,12 +1201,12 @@ export default function App() {
                     </div>
                     <div>
                        <label className="text-[10px] uppercase font-black text-gray-400 px-3">Qtd. Bebidas</label>
-                       <input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.qtdBebidas} onChange={e => setEdit({...edit, qtdBebidas: parseInt(e.target.value)})} />
+                       <input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.qtdBebidas || 1} onChange={e => setEdit({...edit, qtdBebidas: parseInt(e.target.value)})} />
                     </div>
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-black text-gray-400 px-3">Preço Fixo do Combo</label>
-                    <input type="number" step="0.01" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>
+                    <input type="number" step="0.01" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price || 0} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>
                   </div>
                 </>
               )}
@@ -1185,7 +1215,7 @@ export default function App() {
                 <>
                   <div>
                     <label className="text-[10px] uppercase font-black text-gray-400 px-3">Tamanho da Pizza</label>
-                    <select className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.tamanhoId} onChange={e => setEdit({...edit, tamanhoId: e.target.value})}>
+                    <select className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500" value={edit.tamanhoId || 'gigante'} onChange={e => setEdit({...edit, tamanhoId: e.target.value})}>
                       <option value="broto">Broto</option>
                       <option value="grande">Grande</option>
                       <option value="gigante">Gigante</option>
@@ -1195,7 +1225,7 @@ export default function App() {
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-black text-gray-400 px-3">Preço Fixo (Com Frete Grátis)</label>
-                    <input type="number" step="0.01" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>
+                    <input type="number" step="0.01" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price || 0} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>
                   </div>
                 </>
               )}
@@ -1205,14 +1235,14 @@ export default function App() {
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map((t, idx) => (
                     <div key={`edit-tam-${idx}`}>
                       <label className="text-[10px] uppercase font-black text-gray-400 px-3">{t.replace('_',' ')}</label>
-                      <input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...edit.prices, [t]: parseFloat(e.target.value) } })}/>
+                      <input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...(edit.prices || {}), [t]: parseFloat(e.target.value) } })}/>
                     </div>
                   ))}
                 </div>
               )}
               
-              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço Normal" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
-              {aba === 'equipe' && <input placeholder="E-mail" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
+              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço Normal" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price || 0} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
+              {aba === 'equipe' && <input placeholder="E-mail" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email || ''} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
             </div>
             
             <button type="submit" disabled={isUp} className="w-full bg-green-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-green-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
@@ -1225,7 +1255,7 @@ export default function App() {
           <div className="w-full md:w-96 bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
             <div className="p-6 bg-black text-white flex justify-between items-center rounded-bl-[40px]">
               <div>
-                <h3 className="font-black italic uppercase text-lg leading-tight">{chatAberto.clientName}</h3>
+                <h3 className="font-black italic uppercase text-lg leading-tight">{chatAberto.clientName || 'Cliente'}</h3>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest flex items-center gap-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/> Online no App
                 </p>
@@ -1236,11 +1266,11 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
               {(!chatMsgs || chatMsgs.length === 0) && <p className="text-center text-gray-400 text-xs font-bold mt-10 uppercase">Nenhuma mensagem.</p>}
               {Array.isArray(chatMsgs) && chatMsgs.map((m, idx) => (
-                <div key={m.id || `chat-${idx}`} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`p-4 rounded-[24px] max-w-[85%] text-sm font-medium shadow-sm ${m.sender === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-800 rounded-tl-none'}`}>
-                    {m.text}
-                    <span className={`block text-[8px] font-bold mt-1 uppercase ${m.sender === 'admin' ? 'text-blue-200' : 'text-gray-400'}`}>
-                      {new Date(m.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                <div key={m.id || `chat-${idx}`} className={`flex ${m?.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`p-4 rounded-[24px] max-w-[85%] text-sm font-medium shadow-sm ${m?.sender === 'admin' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-800 rounded-tl-none'}`}>
+                    {m?.text || ''}
+                    <span className={`block text-[8px] font-bold mt-1 uppercase ${m?.sender === 'admin' ? 'text-blue-200' : 'text-gray-400'}`}>
+                      {new Date(m?.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>
                   </div>
                 </div>
@@ -1256,5 +1286,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export function AppContainer() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
   );
 }
