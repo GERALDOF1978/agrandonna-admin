@@ -33,7 +33,7 @@ export default function App() {
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
-  const [combos, setCombos] = useState([]); // NOVO ESTADO: COMBOS
+  const [combos, setCombos] = useState([]); 
   const [banners, setBanners] = useState([]);
   const [equipe, setEquipe] = useState([]);
   const [edit, setEdit] = useState(null);
@@ -98,7 +98,7 @@ export default function App() {
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => setCombos(s.docs.map(d => ({ id: d.id, ...d.data() })))); // ESCUTA OS COMBOS
+    const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => setCombos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     
@@ -179,7 +179,11 @@ export default function App() {
         if (!precos.um_metro || precos.um_metro === 0) precos.um_metro = 87.90;
       }
       
-      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce });
+      // Automaticamente marca algumas tradicionais pro combo só pra facilitar a vida
+      const isComboDef = !isDoce && precos.grande < 60; // Só um chute provisório
+      const isComboFinal = sabor.isCombo !== undefined ? sabor.isCombo : isComboDef;
+
+      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce, isCombo: isComboFinal });
       atualizadas++;
     }
     setLoadingMagic(false);
@@ -345,7 +349,6 @@ export default function App() {
                 </p>
               ))}
               
-              {/* Exibe bebidas do combo se for combo */}
               {it.bebidasCombo && (
                 <div className="text-[9px] text-blue-600 font-bold italic leading-tight mt-1 flex flex-col gap-0.5">
                   <span className="text-gray-500 uppercase">Incluso:</span>
@@ -411,7 +414,6 @@ export default function App() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {/* ADD ABA COMBOS AQUI */}
           {['pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
@@ -448,10 +450,10 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false } :
+                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false, isCombo: false } :
                 aba === 'bordas' ? { name: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, isActive: true } :
                 aba === 'combos' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', qtdBebidas: 1, img: '', isActive: true } :
-                aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true } :
+                aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true, isCombo: false } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
               );
@@ -485,7 +487,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TABELAS DE PRODUTOS */}
+        {/* TABELAS DE PRODUTOS COM AS ETIQUETAS DO COMBO */}
         {['sabores', 'bordas', 'bebidas', 'combos', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -520,6 +522,13 @@ export default function App() {
                             🍬 Doce
                           </span>
                         )}
+                        
+                        {/* ETIQUETA COMBO NA TABELA */}
+                        {['sabores', 'bebidas'].includes(aba) && it.isCombo && (
+                          <span className="bg-purple-100 text-purple-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-purple-200 flex items-center gap-1">
+                            <Package size={10}/> Combo
+                          </span>
+                        )}
 
                         {['sabores', 'bordas', 'bebidas', 'combos'].includes(aba) && it.isActive === false && (
                           <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
@@ -536,7 +545,6 @@ export default function App() {
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
                     {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {Number(it.price || 0).toFixed(2)}</span>}
                     
-                    {/* VISUAL DA COLUNA NOVO PARA COMBOS */}
                     {aba === 'combos' && (
                       <div>
                          <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {Number(it.price || 0).toFixed(2)}</span>
@@ -725,7 +733,7 @@ export default function App() {
              </div>
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
-                <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Outras Configurações</h3>
+                <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Geral</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
@@ -762,6 +770,34 @@ export default function App() {
               
               {['sabores', 'combos'].includes(aba) && <textarea placeholder={aba === 'combos' ? "Descrição do Combo (Ex: 1 Pizza + 1 Refri)" : "Ingredientes..."} className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
+              {/* CAIXINHAS (SABORES) - AGORA SÃO 3 */}
+              {aba === 'sabores' && (
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="flex flex-col items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-2xl cursor-pointer hover:bg-red-100 transition-colors text-center">
+                    <input type="checkbox" className="w-4 h-4 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
+                    <span className="font-bold text-red-600 text-[9px] uppercase"><Flame size={12} className="inline mr-1"/> Promoção?</span>
+                  </label>
+                  
+                  <label className="flex flex-col items-center gap-2 p-3 bg-pink-50 border border-pink-100 rounded-2xl cursor-pointer hover:bg-pink-100 transition-colors text-center">
+                    <input type="checkbox" className="w-4 h-4 accent-pink-600 rounded" checked={edit.isDoce || false} onChange={e => setEdit({ ...edit, isDoce: e.target.checked })} />
+                    <span className="font-bold text-pink-600 text-[9px] uppercase">🍬 Doce?</span>
+                  </label>
+
+                  <label className="flex flex-col items-center gap-2 p-3 bg-purple-50 border border-purple-100 rounded-2xl cursor-pointer hover:bg-purple-100 transition-colors text-center">
+                    <input type="checkbox" className="w-4 h-4 accent-purple-600 rounded" checked={edit.isCombo || false} onChange={e => setEdit({ ...edit, isCombo: e.target.checked })} />
+                    <span className="font-bold text-purple-600 text-[9px] uppercase"><Package size={12} className="inline mr-1"/> Combo?</span>
+                  </label>
+                </div>
+              )}
+
+              {/* CAIXINHAS (BEBIDAS) - ADICIONADO "COMBO" */}
+              {aba === 'bebidas' && (
+                <label className="flex items-center justify-center gap-2 p-4 bg-purple-50 border border-purple-100 rounded-3xl cursor-pointer hover:bg-purple-100 transition-colors text-center">
+                  <input type="checkbox" className="w-5 h-5 accent-purple-600 rounded" checked={edit.isCombo || false} onChange={e => setEdit({ ...edit, isCombo: e.target.checked })} />
+                  <span className="font-bold text-purple-600 text-xs flex items-center gap-1 uppercase"><Package size={14}/> Faz parte de Combos?</span>
+                </label>
+              )}
+
               {/* CONFIGURAÇÕES ESPECIAIS DE COMBOS */}
               {aba === 'combos' && (
                 <>
@@ -788,20 +824,6 @@ export default function App() {
                 </>
               )}
 
-              {aba === 'sabores' && (
-                <div className="flex gap-4">
-                  <label className="flex-1 flex flex-col items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-3xl cursor-pointer hover:bg-red-100 transition-colors text-center">
-                    <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
-                    <span className="font-bold text-red-600 text-xs flex items-center gap-1 uppercase"><Flame size={14}/> Destacar Promoção</span>
-                  </label>
-                  
-                  <label className="flex-1 flex flex-col items-center gap-2 p-4 bg-pink-50 border border-pink-100 rounded-3xl cursor-pointer hover:bg-pink-100 transition-colors text-center">
-                    <input type="checkbox" className="w-5 h-5 accent-pink-600 rounded" checked={edit.isDoce || false} onChange={e => setEdit({ ...edit, isDoce: e.target.checked })} />
-                    <span className="font-bold text-pink-600 text-xs uppercase">🍬 É Pizza Doce?</span>
-                  </label>
-                </div>
-              )}
-
               {['sabores', 'bordas'].includes(aba) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map(t => (
@@ -813,7 +835,7 @@ export default function App() {
                 </div>
               )}
               
-              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
+              {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço Normal" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
               {aba === 'equipe' && <input placeholder="E-mail" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
             </div>
             
