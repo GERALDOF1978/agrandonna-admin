@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeeWoPLjf14v12RguHdlL4GjpKs3TGrjA",
@@ -31,6 +31,7 @@ export default function App() {
   const [aba, setAba] = useState('pedidos');
   const [pedidos, setPedidos] = useState([]);
   const [sabores, setSabores] = useState([]);
+  const [bordas, setBordas] = useState([]); // NOVO ESTADO: BORDAS RECHEADAS
   const [bebidas, setBebidas] = useState([]);
   const [banners, setBanners] = useState([]);
   const [equipe, setEquipe] = useState([]);
@@ -42,10 +43,9 @@ export default function App() {
   const [filtroCaixa, setFiltroCaixa] = useState(getDataLocalStr());
   const [filtroHist, setFiltroHist] = useState(getDataLocalStr());
   
-  // ATUALIZADO: cfg com numLoja e msgFechado
   const [cfg, setCfg] = useState({ 
     tempo: 40, taxaMinima: 6, kmIncluso: 3, valorKm: 1, cepLoja: '13500000', numLoja: '', horaAbre: '18:00',
-    aberto: true, msgFechado: 'Estamos fechados no momento. Retornaremos em breve!', zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA',
+    aberto: true, msgFechado: 'Nossa loja está fechada no momento. Retornaremos em breve!', zap: '19988723803', logo: 'https://i.ibb.co/WN4kL4xv/logo-pizza.jpg', topo: 'A GRANDONNA',
     splashAtivo: false, splashImg: '', 
     promoBroto: true, precoPromoBroto: 34.00,
     promoGrande: true, precoPromoGrande: 47.90, 
@@ -95,6 +95,7 @@ export default function App() {
     });
 
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); // LÊ AS BORDAS
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -108,9 +109,9 @@ export default function App() {
           kmIncluso: data.kmIncluso ?? 3,
           valorKm: data.valorKm ?? 1,
           cepLoja: data.cepLoja ?? '13500000',
-          numLoja: data.numLoja ?? '', // Resgata o número da loja
+          numLoja: data.numLoja ?? '',
           horaAbre: data.horaAbre ?? '18:00',
-          msgFechado: data.msgFechado ?? 'Nossa loja está fechada no momento. Abriremos em breve.', // Resgata a mensagem
+          msgFechado: data.msgFechado ?? 'Nossa loja está fechada no momento. Retornaremos em breve.', 
           promoBroto: data.promoBroto ?? true, precoPromoBroto: data.precoPromoBroto ?? 34.00,
           promoGrande: data.promoGrande ?? true, precoPromoGrande: data.precoPromoGrande ?? 47.90,
           promoGigante: data.promoGigante ?? true, precoPromoGigante: data.precoPromoGigante ?? 72.99,
@@ -121,7 +122,7 @@ export default function App() {
       }
     });
 
-    return () => { unsubP(); unsubS(); unsubB(); unsubN(); unsubE(); unsubC(); };
+    return () => { unsubP(); unsubS(); unsubBordas(); unsubB(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
 
   useEffect(() => {
@@ -197,6 +198,7 @@ export default function App() {
             .bold { font-weight: bold; }
             .text-center { text-align: center; }
             .margin-bot { margin-bottom: 5px; }
+            .obs-box { border: 1px solid #000; padding: 5px; margin-top: 5px; font-weight: bold; }
           </style>
         </head>
         <body>
@@ -207,21 +209,25 @@ export default function App() {
           <div class="bold">CLIENTE:</div>
           <div>${p.clientName}</div>
           <div class="margin-bot">Tel: ${p.clientPhone}</div>
+          
+          ${p.obs ? `<div class="obs-box">OBS: ${p.obs}</div>` : ''}
+
           <div class="divisor"></div>
           <div class="bold">${p.entrega === 'retirada' ? 'BALCAO / RETIRADA' : 'DELIVERY'}</div>
           ${p.entrega === 'entrega' ? `
             <div class="margin-bot">${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}</div>
             ${p.end?.distancia ? `<div>Distancia: ${p.end.distancia} km</div>` : ''}
-            <div>Frete Cobrado: R$ ${p.end?.taxaCobrada?.toFixed(2)}</div>
+            <div>Frete Cobrado: R$ ${Number(p.end?.taxaCobrada || 0).toFixed(2)}</div>
           ` : ''}
           <div class="divisor"></div>
           <div class="bold margin-bot">ITENS:</div>
           ${p.items?.map(it => `
-            <div class="flex bold"><span>1x ${it.name || `PZ ${it.tamanho?.name}`}</span><span>R$ ${it.preco?.toFixed(2)}</span></div>
-            ${it.sabores ? `<div style="font-size:12px; margin-bottom:8px; padding-left:10px;">${it.sabores.map(s => '+ ' + s.name).join('<br>')}</div>` : ''}
+            <div class="flex bold"><span>1x ${it.name || `PZ ${it.tamanho?.name}`}</span><span>R$ ${Number(it.preco || 0).toFixed(2)}</span></div>
+            ${it.sabores ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px;">${it.sabores.map(s => '+ ' + s.name).join('<br>')}</div>` : ''}
+            ${it.borda ? `<div style="font-size:12px; margin-bottom:8px; padding-left:10px; font-style: italic;">+ Borda: ${it.borda.name} (R$ ${Number(it.borda.preco || 0).toFixed(2)})</div>` : '<div style="margin-bottom:8px;"></div>'}
           `).join('')}
           <div class="divisor"></div>
-          <div class="flex bold" style="font-size: 16px;"><span>TOTAL:</span><span>R$ ${p.total?.toFixed(2)}</span></div>
+          <div class="flex bold" style="font-size: 16px;"><span>TOTAL:</span><span>R$ ${Number(p.total || 0).toFixed(2)}</span></div>
           <div class="divisor"></div>
           <div class="margin-bot">Pagamento: ${p.pag === 'pix_app' ? 'PIX APP' : p.pag.toUpperCase()}</div>
           ${p.pag === 'dinheiro' && p.troco ? `<div class="bold">Levar Troco: R$ ${p.troco}</div>` : ''}
@@ -239,7 +245,7 @@ export default function App() {
 
   const stats = useMemo(() => {
     const pedsDoDia = pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroCaixa && p.status === 'entregue');
-    const total = pedsDoDia.reduce((a, b) => a + (b.total || 0), 0);
+    const total = pedsDoDia.reduce((a, b) => a + Number(b.total || 0), 0);
     const contagem = {};
     pedsDoDia.flatMap(p => p.items || []).forEach(i => {
       const nome = i.name || `PZ ${i.tamanho?.name || 'Pizza'}`;
@@ -260,13 +266,13 @@ export default function App() {
 
   const salvar = async (e) => {
     e.preventDefault();
-    const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
+    const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
     const data = { ...edit }; const id = data.id; delete data.id;
 
     try {
       if (id) await setDoc(doc(db, col, String(id)), data, { merge: true });
       else {
-        if (['sabores', 'bebidas'].includes(aba)) data.isActive = true;
+        if (['sabores', 'bordas', 'bebidas'].includes(aba)) data.isActive = true;
         await addDoc(collection(db, col), data);
       }
       setEdit(null);
@@ -275,7 +281,7 @@ export default function App() {
 
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
-    const col = aba === 'sabores' ? 'menu_sabores' : 'menu_bebidas';
+    const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : 'menu_bebidas';
     const newState = item.isActive === false ? true : false;
     try { await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); } 
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
@@ -318,27 +324,41 @@ export default function App() {
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
           <div>
             {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
-            {p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {p.end.taxaCobrada?.toFixed(2)}</span>}
+            {p.entrega === 'entrega' && p.end?.distancia && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end.distancia} km | Taxa: R$ {Number(p.end.taxaCobrada || 0).toFixed(2)}</span>}
           </div>
         </div>
         
         <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
           {p.items?.map((it, idx) => (
-            <div key={idx} className="flex flex-col">
+            <div key={idx} className="flex flex-col border-b border-gray-50 pb-2 last:border-0">
               <div className="flex justify-between font-bold text-xs text-gray-800">
                 <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                <span className="text-gray-400">R$ {it.preco?.toFixed(2)}</span>
+                <span className="text-gray-400">R$ {Number(it.preco || 0).toFixed(2)}</span>
               </div>
               {it.sabores?.map((s, si) => (
-                <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight">
+                <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight mt-1">
                   + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
                 </p>
               ))}
+              {/* EXIBE A BORDA SE EXISTIR NESTE ITEM */}
+              {it.borda && (
+                <p className="text-[9px] text-orange-500 font-bold italic leading-tight mt-1">
+                  + Borda: {it.borda.name} <span className="text-gray-400 font-medium">(R$ {Number(it.borda.preco || 0).toFixed(2)})</span>
+                </p>
+              )}
             </div>
           ))}
         </div>
 
-        <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10">
+        {/* BLOCO DE OBSERVAÇÃO DO CLIENTE */}
+        {p.obs && (
+          <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-200 relative z-10">
+            <span className="text-[9px] font-black uppercase text-yellow-700 block mb-1 flex items-center gap-1"><Flame size={12}/> Observação do Cliente:</span>
+            <span className="text-xs font-bold text-gray-800 italic">{p.obs}</span>
+          </div>
+        )}
+
+        <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10 mt-2">
           <span className="text-[9px] font-black uppercase text-gray-500">
             Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
             {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
@@ -352,7 +372,7 @@ export default function App() {
           <button onClick={() => updateDoc(doc(db, 'pedidos', String(p.id)), { status: 'entregue' })} className={`p-2 rounded-xl text-[8px] font-black uppercase transition-all ${p.status === 'entregue' ? 'bg-green-600 text-white shadow-md shadow-green-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>Concluído</button>
         </div>
         
-        <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {p.total?.toFixed(2)}</div>
+        <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {Number(p.total || 0).toFixed(2)}</div>
       </div>
     );
   };
@@ -374,12 +394,14 @@ export default function App() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {['pedidos', 'historico', 'sabores', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
+          {/* ADD ABA BORDAS AQUI */}
+          {['pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
                 {m === 'pedidos' && <ClipboardList size={16}/>}
                 {m === 'historico' && <History size={16}/>}
                 {m === 'sabores' && <Pizza size={16}/>}
+                {m === 'bordas' && <CircleDashed size={16}/>}
                 {m === 'bebidas' && <CupSoda size={16}/>}
                 {m === 'caixa' && <BarChart3 size={16}/>}
                 {m === 'equipe' && <Users size={16}/>}
@@ -401,7 +423,7 @@ export default function App() {
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
         <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
           <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
-          {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
+          {['sabores', 'bordas', 'bebidas', 'banners', 'equipe'].includes(aba) && (
             <button onClick={() => {
               if (aba === 'equipe' && !isMst) {
                 const p = prompt("Senha Master:");
@@ -409,6 +431,7 @@ export default function App() {
               }
               setEdit(
                 aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false } :
+                aba === 'bordas' ? { name: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, isActive: true } :
                 aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true } :
                 aba === 'equipe' ? { nome: '', email: '' } :
                 { title: '', imageUrl: '' }
@@ -443,13 +466,14 @@ export default function App() {
           </div>
         )}
 
-        {['sabores', 'bebidas', 'banners', 'equipe'].includes(aba) && (
+        {/* TABELAS DE PRODUTOS E BORDAS */}
+        {['sabores', 'bordas', 'bebidas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
                 <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Preços / Informação</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
-              <tbody>{(aba === 'sabores' ? sabores : aba === 'bebidas' ? bebidas : aba === 'banners' ? banners : equipe).map(it => (
+              <tbody>{(aba === 'sabores' ? sabores : aba === 'bordas' ? bordas : aba === 'bebidas' ? bebidas : aba === 'banners' ? banners : equipe).map(it => (
                 <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
                     <div className="relative shrink-0">
@@ -457,7 +481,7 @@ export default function App() {
                         <img src={it.img || it.imageUrl} className={`w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white ${it.isActive === false ? 'grayscale opacity-50' : ''}`}/>
                       ) : (
                         <div className={`w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-white ${it.isActive === false ? 'text-red-300' : 'text-gray-300'}`}>
-                          {aba === 'sabores' ? <Pizza size={24}/> : aba === 'bebidas' ? <CupSoda size={24}/> : <User size={24}/>}
+                          {aba === 'sabores' ? <Pizza size={24}/> : aba === 'bordas' ? <CircleDashed size={24}/> : aba === 'bebidas' ? <CupSoda size={24}/> : <User size={24}/>}
                         </div>
                       )}
                     </div>
@@ -478,7 +502,7 @@ export default function App() {
                           </span>
                         )}
 
-                        {['sabores', 'bebidas'].includes(aba) && it.isActive === false && (
+                        {['sabores', 'bordas', 'bebidas'].includes(aba) && it.isActive === false && (
                           <span className="bg-red-100 text-red-600 text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider">Esgotado</span>
                         )}
                       </div>
@@ -491,9 +515,9 @@ export default function App() {
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
-                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {it.price.toFixed(2)}</span>}
+                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {Number(it.price || 0).toFixed(2)}</span>}
                     
-                    {aba === 'sabores' && it.prices && (
+                    {['sabores', 'bordas'].includes(aba) && it.prices && (
                       <div className="flex flex-wrap gap-1 max-w-[250px]">
                         {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {it.prices.broto}</span>}
                         {it.prices.grande > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gra: R$ {it.prices.grande}</span>}
@@ -506,7 +530,7 @@ export default function App() {
                     {aba === 'banners' && <span className="text-[8px] text-gray-300 truncate max-w-[150px] block">{it.imageUrl}</span>}
                   </td>
                   <td className="p-6 text-right space-x-2 whitespace-nowrap">
-                    {['sabores', 'bebidas'].includes(aba) && (
+                    {['sabores', 'bordas', 'bebidas'].includes(aba) && (
                       <button onClick={() => toggleActive(it)} className={`p-3 rounded-2xl transition-all mr-2 ${it.isActive === false ? 'text-gray-400 hover:bg-gray-200' : 'text-green-600 hover:bg-green-50'}`}>
                         {it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </button>
@@ -514,7 +538,7 @@ export default function App() {
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
                     <button onClick={async () => { 
                       if (window.confirm('Eliminar permanentemente?')) {
-                        const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
+                        const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
                         await deleteDoc(doc(db, colName, String(it.id)));
                       }
                     }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
@@ -563,7 +587,6 @@ export default function App() {
                <Power size={22} className="inline mr-2"/> {cfg.aberto ? 'LOJA ABERTA' : 'LOJA FECHADA'}
              </button>
 
-             {/* BLOCO DA MENSAGEM DE LOJA FECHADA */}
              <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Mensagem de Loja Fechada</h3>
                 <div>
@@ -691,14 +714,16 @@ export default function App() {
         )}
       </main>
 
+      {/* MODAL DE EDIÇÃO DE ITENS */}
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black uppercase italic border-b pb-4 flex justify-between items-center text-gray-800 tracking-tighter">Configurar {aba} <button type="button" onClick={() => setEdit(null)}><X size={30} className="text-gray-300 hover:text-black"/></button></h2>
             
-            {['sabores', 'bebidas', 'banners'].includes(aba) && (
+            {['sabores', 'bordas', 'bebidas', 'banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                 <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />
+                 {/* Borda não tem foto no nosso sistema pra ficar simples, mas mantive o uploader por padrão caso queira usar futuramente */}
+                 {aba !== 'bordas' && <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />}
                  <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center uppercase">
                    {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setEdit({ ...edit, [aba === 'banners' ? 'imageUrl' : 'img']: url }))} />
@@ -725,7 +750,8 @@ export default function App() {
                 </div>
               )}
 
-              {aba === 'sabores' && (
+              {/* MATRIZ DE PREÇOS PARA SABORES E BORDAS */}
+              {['sabores', 'bordas'].includes(aba) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map(t => (
                     <div key={t}>

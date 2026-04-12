@@ -31,7 +31,7 @@ export default function App() {
   const [aba, setAba] = useState('pedidos');
   const [pedidos, setPedidos] = useState([]);
   const [sabores, setSabores] = useState([]);
-  const [bordas, setBordas] = useState([]); // NOVO ESTADO: BORDAS RECHEADAS
+  const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
   const [banners, setBanners] = useState([]);
   const [equipe, setEquipe] = useState([]);
@@ -95,7 +95,7 @@ export default function App() {
     });
 
     const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); // LÊ AS BORDAS
+    const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -184,6 +184,7 @@ export default function App() {
     alert(`Mágica Feita! ${atualizadas} pizzas foram ajustadas.`);
   };
 
+  // ATUALIZADO: Impressão do Cupom Fiscal com os preços divididos
   const imprimirPedido = (p) => {
     const janela = window.open('', '', 'width=300,height=600');
     janela.document.write(`
@@ -222,9 +223,10 @@ export default function App() {
           <div class="divisor"></div>
           <div class="bold margin-bot">ITENS:</div>
           ${p.items?.map(it => `
-            <div class="flex bold"><span>1x ${it.name || `PZ ${it.tamanho?.name}`}</span><span>R$ ${Number(it.preco || 0).toFixed(2)}</span></div>
+            <div class="flex bold"><span>1x ${it.name || `PZ ${it.tamanho?.name}`}</span><span>R$ ${Number(it.precoPizza || it.preco || 0).toFixed(2)}</span></div>
             ${it.sabores ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px;">${it.sabores.map(s => '+ ' + s.name).join('<br>')}</div>` : ''}
-            ${it.borda ? `<div style="font-size:12px; margin-bottom:8px; padding-left:10px; font-style: italic;">+ Borda: ${it.borda.name} (R$ ${Number(it.borda.preco || 0).toFixed(2)})</div>` : '<div style="margin-bottom:8px;"></div>'}
+            ${it.borda ? `<div class="flex" style="font-size:12px; padding-left:10px; font-style: italic;"><span>+ Borda: ${it.borda.name}</span><span>R$ ${Number(it.borda.precoVendido || 0).toFixed(2)}</span></div>` : ''}
+            ${it.borda ? `<div class="flex bold" style="font-size:12px; padding-left:10px; margin-bottom:8px; margin-top:2px; border-top: 1px dotted #ccc;"><span>Subtotal do Item:</span><span>R$ ${Number(it.preco || 0).toFixed(2)}</span></div>` : '<div style="margin-bottom:8px;"></div>'}
           `).join('')}
           <div class="divisor"></div>
           <div class="flex bold" style="font-size: 16px;"><span>TOTAL:</span><span>R$ ${Number(p.total || 0).toFixed(2)}</span></div>
@@ -333,24 +335,30 @@ export default function App() {
             <div key={idx} className="flex flex-col border-b border-gray-50 pb-2 last:border-0">
               <div className="flex justify-between font-bold text-xs text-gray-800">
                 <span>1x {it.name || `Pizza ${it.tamanho?.name}`}</span>
-                <span className="text-gray-400">R$ {Number(it.preco || 0).toFixed(2)}</span>
+                <span className="text-gray-400">R$ {Number(it.precoPizza || it.preco || 0).toFixed(2)}</span>
               </div>
               {it.sabores?.map((s, si) => (
                 <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight mt-1">
                   + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
                 </p>
               ))}
-              {/* EXIBE A BORDA SE EXISTIR NESTE ITEM */}
+              
+              {/* ATUALIZADO: Borda e Subtotal separados na tela do Admin */}
               {it.borda && (
-                <p className="text-[9px] text-orange-500 font-bold italic leading-tight mt-1">
-                  + Borda: {it.borda.name} <span className="text-gray-400 font-medium">(R$ {Number(it.borda.preco || 0).toFixed(2)})</span>
-                </p>
+                <div className="flex justify-between items-center text-[9px] text-orange-500 font-bold italic leading-tight mt-1">
+                  <span>+ Borda: {it.borda.name}</span>
+                  <span>R$ {Number(it.borda.precoVendido || 0).toFixed(2)}</span>
+                </div>
+              )}
+              {it.tipo === 'pizza' && it.borda && (
+                <div className="flex justify-end text-[10px] text-yellow-600 font-black mt-1">
+                  Subtotal: R$ {Number(it.preco || 0).toFixed(2)}
+                </div>
               )}
             </div>
           ))}
         </div>
 
-        {/* BLOCO DE OBSERVAÇÃO DO CLIENTE */}
         {p.obs && (
           <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-200 relative z-10">
             <span className="text-[9px] font-black uppercase text-yellow-700 block mb-1 flex items-center gap-1"><Flame size={12}/> Observação do Cliente:</span>
@@ -394,7 +402,6 @@ export default function App() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {/* ADD ABA BORDAS AQUI */}
           {['pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
@@ -466,7 +473,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TABELAS DE PRODUTOS E BORDAS */}
         {['sabores', 'bordas', 'bebidas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
@@ -698,7 +704,7 @@ export default function App() {
              </div>
 
              <div className="space-y-4 pt-4 border-t border-gray-100">
-                <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Outras Configurações</h3>
+                <h3 className="font-black text-xs text-gray-400 uppercase text-center mb-2">Geral</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">WhatsApp da Loja</label><input className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none focus:border-red-500" value={cfg.zap} onChange={e => setCfg({ ...cfg, zap: e.target.value })}/></div>
                   <div><label className="text-[10px] font-black uppercase text-gray-400 px-4 mb-1 block">Tempo Médio</label><input type="number" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-[24px] font-bold outline-none" value={cfg.tempo} onChange={e => setCfg({ ...cfg, tempo: e.target.value })} placeholder="Minutos"/></div>
@@ -714,7 +720,6 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE EDIÇÃO DE ITENS */}
       {edit && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -722,7 +727,6 @@ export default function App() {
             
             {['sabores', 'bordas', 'bebidas', 'banners'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                 {/* Borda não tem foto no nosso sistema pra ficar simples, mas mantive o uploader por padrão caso queira usar futuramente */}
                  {aba !== 'bordas' && <img src={edit.img || edit.imageUrl || cfg.logo} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />}
                  <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center uppercase">
                    {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
@@ -750,7 +754,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* MATRIZ DE PREÇOS PARA SABORES E BORDAS */}
               {['sabores', 'bordas'].includes(aba) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map(t => (
