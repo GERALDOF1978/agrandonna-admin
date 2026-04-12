@@ -25,6 +25,20 @@ const getDataLocalStr = (timestamp) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// BLINDAGEM: Função para garantir que os dados salvam na coleção exata
+const getCollectionName = (tab) => {
+  switch(tab) {
+    case 'sabores': return 'menu_sabores';
+    case 'bordas': return 'menu_bordas';
+    case 'bebidas': return 'menu_bebidas';
+    case 'combos': return 'menu_combos';
+    case 'ofertas': return 'menu_ofertas';
+    case 'banners': return 'menu_banners';
+    case 'equipe': return 'admin_users';
+    default: return '';
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasPerm, setHasPerm] = useState(false);
@@ -34,7 +48,7 @@ export default function App() {
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
   const [combos, setCombos] = useState([]); 
-  const [ofertas, setOfertas] = useState([]); // NOVO ESTADO: OFERTAS (FRETE GRÁTIS)
+  const [ofertas, setOfertas] = useState([]); 
   const [banners, setBanners] = useState([]);
   const [equipe, setEquipe] = useState([]);
   const [edit, setEdit] = useState(null);
@@ -100,7 +114,7 @@ export default function App() {
     const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => setCombos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubOfertas = onSnapshot(collection(db, 'menu_ofertas'), s => setOfertas(s.docs.map(d => ({ id: d.id, ...d.data() })))); // LÊ AS OFERTAS
+    const unsubOfertas = onSnapshot(collection(db, 'menu_ofertas'), s => setOfertas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
     const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     
@@ -164,7 +178,7 @@ export default function App() {
   };
 
   const arrumarBancoDeDados = async () => {
-    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços padroes que faltam. Quer continuar?")) return;
+    if (!window.confirm("Essa função vai ler todas as pizzas, marcar as doces automaticamente e colocar os preços que faltam. Quer continuar?")) return;
     setLoadingMagic(true);
     let atualizadas = 0;
     const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
@@ -183,8 +197,9 @@ export default function App() {
       
       const isComboDef = !isDoce && precos.grande < 60; 
       const isComboFinal = sabor.isCombo !== undefined ? sabor.isCombo : isComboDef;
+      const isOfertaFinal = sabor.isOferta !== undefined ? sabor.isOferta : isComboDef; // Habilita para ofertas também
 
-      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce, isCombo: isComboFinal });
+      await updateDoc(doc(db, 'menu_sabores', String(sabor.id)), { prices: precos, isDoce: isDoce, isCombo: isComboFinal, isOferta: isOfertaFinal });
       atualizadas++;
     }
     setLoadingMagic(false);
@@ -273,9 +288,12 @@ export default function App() {
     setIsUp(false);
   };
 
+  // BLINDAGEM NO SALVAMENTO
   const salvar = async (e) => {
     e.preventDefault();
-    const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'combos' ? 'menu_combos' : aba === 'ofertas' ? 'menu_ofertas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
+    const col = getCollectionName(aba);
+    if (!col) return alert("Erro interno: Categoria desconhecida.");
+
     const data = { ...edit }; const id = data.id; delete data.id;
 
     try {
@@ -288,9 +306,11 @@ export default function App() {
     } catch (err) { alert("Erro ao guardar os dados: " + err.message); }
   };
 
+  // BLINDAGEM AO ATIVAR/DESATIVAR
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
-    const col = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : aba === 'combos' ? 'menu_combos' : aba === 'ofertas' ? 'menu_ofertas' : 'menu_bebidas';
+    const col = getCollectionName(aba);
+    if (!col) return;
     const newState = item.isActive === false ? true : false;
     try { await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); } 
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
@@ -410,12 +430,25 @@ export default function App() {
     </div>
   );
 
+  // BLINDAGEM: Retorna a lista exata para evitar vazamento visual
+  const getTabelaAtual = () => {
+    switch(aba) {
+      case 'sabores': return sabores;
+      case 'bordas': return bordas;
+      case 'combos': return combos;
+      case 'ofertas': return ofertas;
+      case 'bebidas': return bebidas;
+      case 'banners': return banners;
+      case 'equipe': return equipe;
+      default: return [];
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row font-sans">
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {/* ADICIONADO A ABA OFERTAS AQUI */}
           {['pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
@@ -453,7 +486,7 @@ export default function App() {
                 if (p === 'GRAN2026') setIsMst(true); else return alert("Senha Incorreta");
               }
               setEdit(
-                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false, isCombo: false } :
+                aba === 'sabores' ? { name: '', desc: '', description: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, img: '', isActive: true, isPromo: false, isDoce: false, isCombo: false, isOferta: false } :
                 aba === 'bordas' ? { name: '', prices: { broto: 0, grande: 0, gigante: 0, meio_metro: 0, um_metro: 0 }, isActive: true } :
                 aba === 'combos' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', qtdBebidas: 1, img: '', isActive: true } :
                 aba === 'ofertas' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', img: '', isActive: true } :
@@ -491,14 +524,14 @@ export default function App() {
           </div>
         )}
 
-        {/* TABELAS DE PRODUTOS */}
+        {/* TABELAS DE PRODUTOS BLINDADAS */}
         {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'equipe'].includes(aba) && (
           <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
                 <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Preços / Informação</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
-              <tbody>{(aba === 'sabores' ? sabores : aba === 'bordas' ? bordas : aba === 'combos' ? combos : aba === 'ofertas' ? ofertas : aba === 'bebidas' ? bebidas : aba === 'banners' ? banners : equipe).map(it => (
+              <tbody>{getTabelaAtual().map(it => (
                 <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
                     <div className="relative shrink-0">
@@ -527,13 +560,21 @@ export default function App() {
                           </span>
                         )}
                         
+                        {/* ETIQUETA COMBO */}
                         {['sabores', 'bebidas'].includes(aba) && it.isCombo && (
                           <span className="bg-purple-100 text-purple-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-purple-200 flex items-center gap-1">
                             <Package size={10}/> Combo
                           </span>
                         )}
 
-                        {/* ETIQUETA OFERTA FRETE GRÁTIS */}
+                        {/* ETIQUETA OFERTA FRETE GRÁTIS NO SABOR */}
+                        {aba === 'sabores' && it.isOferta && (
+                          <span className="bg-green-100 text-green-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-green-200 flex items-center gap-1">
+                            <Ticket size={10}/> Oferta
+                          </span>
+                        )}
+
+                        {/* ETIQUETA OFERTA NA ABA DE OFERTAS */}
                         {aba === 'ofertas' && it.isActive !== false && (
                           <span className="bg-green-100 text-green-600 text-[8px] px-2 py-0.5 rounded-full font-black uppercase border border-green-200 flex items-center gap-1">
                             <Ticket size={10}/> Entrega Grátis
@@ -590,8 +631,8 @@ export default function App() {
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
                     <button onClick={async () => { 
                       if (window.confirm('Eliminar permanentemente?')) {
-                        const colName = aba === 'sabores' ? 'menu_sabores' : aba === 'bordas' ? 'menu_bordas' : aba === 'bebidas' ? 'menu_bebidas' : aba === 'combos' ? 'menu_combos' : aba === 'ofertas' ? 'menu_ofertas' : aba === 'banners' ? 'menu_banners' : 'admin_users';
-                        await deleteDoc(doc(db, colName, String(it.id)));
+                        const colName = getCollectionName(aba);
+                        if(colName) await deleteDoc(doc(db, colName, String(it.id)));
                       }
                     }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
@@ -787,9 +828,9 @@ export default function App() {
               
               {['sabores', 'combos', 'ofertas'].includes(aba) && <textarea placeholder={aba === 'combos' ? "Descrição do Combo..." : aba === 'ofertas' ? "Descrição da Oferta..." : "Ingredientes..."} className="w-full h-24 p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500 transition-colors resize-none" value={edit.desc || edit.description || ''} onChange={e => setEdit({ ...edit, desc: e.target.value, description: e.target.value })} />}
               
-              {/* CAIXINHAS (SABORES) */}
+              {/* CAIXINHAS (SABORES) - AGORA SÃO 4 COM A OFERTA FRETE GRÁTIS */}
               {aba === 'sabores' && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <label className="flex flex-col items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-2xl cursor-pointer hover:bg-red-100 transition-colors text-center">
                     <input type="checkbox" className="w-4 h-4 accent-red-600 rounded" checked={edit.isPromo || false} onChange={e => setEdit({ ...edit, isPromo: e.target.checked })} />
                     <span className="font-bold text-red-600 text-[9px] uppercase"><Flame size={12} className="inline mr-1"/> Promoção?</span>
@@ -803,6 +844,11 @@ export default function App() {
                   <label className="flex flex-col items-center gap-2 p-3 bg-purple-50 border border-purple-100 rounded-2xl cursor-pointer hover:bg-purple-100 transition-colors text-center">
                     <input type="checkbox" className="w-4 h-4 accent-purple-600 rounded" checked={edit.isCombo || false} onChange={e => setEdit({ ...edit, isCombo: e.target.checked })} />
                     <span className="font-bold text-purple-600 text-[9px] uppercase"><Package size={12} className="inline mr-1"/> Combo?</span>
+                  </label>
+
+                  <label className="flex flex-col items-center gap-2 p-3 bg-green-50 border border-green-100 rounded-2xl cursor-pointer hover:bg-green-100 transition-colors text-center">
+                    <input type="checkbox" className="w-4 h-4 accent-green-600 rounded" checked={edit.isOferta || false} onChange={e => setEdit({ ...edit, isOferta: e.target.checked })} />
+                    <span className="font-bold text-green-600 text-[9px] uppercase"><Ticket size={12} className="inline mr-1"/> Oferta (Frete)?</span>
                   </label>
                 </div>
               )}
