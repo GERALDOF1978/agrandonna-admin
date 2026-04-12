@@ -25,20 +25,6 @@ const getDataLocalStr = (timestamp) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const getCollectionName = (tab) => {
-  switch(tab) {
-    case 'sabores': return 'menu_sabores';
-    case 'bordas': return 'menu_bordas';
-    case 'bebidas': return 'menu_bebidas';
-    case 'combos': return 'menu_combos';
-    case 'ofertas': return 'menu_ofertas';
-    case 'banners': return 'menu_banners';
-    case 'equipe': return 'admin_users';
-    default: return '';
-  }
-};
-
-// CONSTANTES NECESSÁRIAS PARA O PDV
 const TAMANHOS_FIXOS = [
   { id: 'broto', name: 'Broto', description: '4 Pedaços', maxFlavors: 1, icon: '🍕', order: 1 },
   { id: 'grande', name: 'Grande', description: '8 Pedaços', maxFlavors: 2, icon: '🍕', order: 2 },
@@ -59,7 +45,7 @@ const isPizzaDoce = (sabor) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasPerm, setHasPerm] = useState(false);
-  const [aba, setAba] = useState('pdv'); // INICIA NO PDV AGORA
+  const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
@@ -95,8 +81,8 @@ export default function App() {
   const scrollRef = useRef(null);
   const qtdPendentes = useRef(0);
 
-  // === ESTADOS DO PDV (PONTO DE VENDA) ===
-  const [pdvAba, setPdvAba] = useState('tradicionais'); // tradicionais, doces, combos, ofertas, bebidas
+  // PDV ESTADOS
+  const [pdvAba, setPdvAba] = useState('tradicionais');
   const [pdvCart, setPdvCart] = useState([]);
   const [pdvNome, setPdvNome] = useState('');
   const [pdvTel, setPdvTel] = useState('');
@@ -107,13 +93,38 @@ export default function App() {
   const [pdvTroco, setPdvTroco] = useState('');
   const [pdvObs, setPdvObs] = useState('');
   
-  // MODAL DO PDV
   const [pdvConfig, setPdvConfig] = useState(null); 
   const [pdvSelS, setPdvSelS] = useState([]);
   const [pdvSelBorda, setPdvSelBorda] = useState(null);
   const [pdvSelBebidas, setPdvSelBebidas] = useState([]);
 
-  // FUNÇÕES DE PREÇO PARA O PDV
+  // Tabela Dinamica com Tratamento de Erros
+  const getCollectionName = (tab) => {
+    switch(tab) {
+      case 'sabores': return 'menu_sabores';
+      case 'bordas': return 'menu_bordas';
+      case 'bebidas': return 'menu_bebidas';
+      case 'combos': return 'menu_combos';
+      case 'ofertas': return 'menu_ofertas';
+      case 'banners': return 'menu_banners';
+      case 'equipe': return 'admin_users';
+      default: return '';
+    }
+  };
+
+  const getTabelaAtual = () => {
+    switch(aba) {
+      case 'sabores': return sabores;
+      case 'bordas': return bordas;
+      case 'combos': return combos;
+      case 'ofertas': return ofertas;
+      case 'bebidas': return bebidas;
+      case 'banners': return banners;
+      case 'equipe': return equipe;
+      default: return [];
+    }
+  };
+
   const getPrecoSabor = (sabor, tId) => {
     if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
     const p = sabor?.prices?.[tId];
@@ -161,7 +172,7 @@ export default function App() {
 
     const unsubP = onSnapshot(query(collection(db, 'pedidos'), orderBy('timestamp', 'desc')), s => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      const novosPendentes = data.filter(p => p.status === 'pendente').length;
+      const novosPendentes = data.filter(p => p?.status === 'pendente').length;
       if (novosPendentes > qtdPendentes.current) {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
         audio.play().catch(e => console.log("Áudio bloqueado."));
@@ -203,35 +214,37 @@ export default function App() {
     return () => { unsubP(); unsubS(); unsubBordas(); unsubB(); unsubCombos(); unsubOfertas(); unsubN(); unsubE(); unsubC(); };
   }, [hasPerm]);
 
+  // BLINDAGEM DE CHAT LISTENER: Só escuta pedidos com usuário válido
   useEffect(() => {
-    if (!hasPerm || pedidos.length === 0) return;
-    const ativos = [...new Set(pedidos.filter(p => ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
+    if (!hasPerm || !pedidos || pedidos.length === 0) return;
+    const ativos = [...new Set(pedidos.filter(p => p && p.userId && ['pendente', 'preparando', 'saiu_entrega'].includes(p.status)).map(p => p.userId))];
     
     const unsubs = ativos.map(uid => {
-      return onSnapshot(query(collection(db, 'artifacts', 'grandonna-oficial', 'users', uid, 'chat'), orderBy('timestamp', 'desc')), s => {
+      if (!uid) return () => {};
+      return onSnapshot(query(collection(db, 'artifacts', 'grandonna-oficial', 'users', String(uid), 'chat'), orderBy('timestamp', 'desc')), s => {
         if (!s.empty) {
           const lastMsg = s.docs[0].data();
-          if (lastMsg.sender === 'user') setAlertasChat(prev => [...new Set([...prev, uid])]);
+          if (lastMsg?.sender === 'user') setAlertasChat(prev => [...new Set([...prev, uid])]);
           else setAlertasChat(prev => prev.filter(id => id !== uid));
         }
       });
     });
 
-    return () => unsubs.forEach(u => u());
+    return () => unsubs.forEach(u => u && u());
   }, [pedidos, hasPerm]);
 
   useEffect(() => {
-    if (!chatAberto) return;
-    const unsub = onSnapshot(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), s => {
-      setChatMsgs(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>a.timestamp-b.timestamp));
+    if (!chatAberto || !chatAberto.userId) return;
+    const unsub = onSnapshot(collection(db, 'artifacts', 'grandonna-oficial', 'users', String(chatAberto.userId), 'chat'), s => {
+      setChatMsgs(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(a?.timestamp||0)-(b?.timestamp||0)));
       setTimeout(() => scrollRef.current?.scrollIntoView({behavior:'smooth'}), 100);
     });
     return () => unsub();
   }, [chatAberto]);
 
   const enviarMsgAdmin = async (e) => {
-    e.preventDefault(); if (!adminMsg.trim()) return;
-    await addDoc(collection(db, 'artifacts', 'grandonna-oficial', 'users', chatAberto.userId, 'chat'), { 
+    e.preventDefault(); if (!adminMsg.trim() || !chatAberto?.userId) return;
+    await addDoc(collection(db, 'artifacts', 'grandonna-oficial', 'users', String(chatAberto.userId), 'chat'), { 
       text: adminMsg, sender: 'admin', timestamp: Date.now() 
     });
     setAdminMsg('');
@@ -244,9 +257,10 @@ export default function App() {
     const docesNomes = ['chocolate', 'morango', 'nutella', 'prestígio', 'prestigio', 'banana', 'confete', 'sorvete', 'doce', 'romeu', 'julieta', 'brigadeiro', 'ouro branco', 'kit kat'];
 
     for (const sabor of sabores) {
-      const nomeSabor = sabor.name.toLowerCase();
+      if (!sabor) continue;
+      const nomeSabor = (sabor.name || '').toLowerCase();
       const isDoce = sabor.isDoce || docesNomes.some(palavra => nomeSabor.includes(palavra));
-      const precos = { ...sabor.prices };
+      const precos = { ...(sabor.prices || {}) };
       
       if (isDoce) {
         precos.broto = 0; precos.gigante = 0; precos.um_metro = 0;
@@ -255,7 +269,7 @@ export default function App() {
         if (!precos.um_metro || precos.um_metro === 0) precos.um_metro = 87.90;
       }
       
-      const isComboDef = !isDoce && precos.grande < 60; 
+      const isComboDef = !isDoce && (precos.grande < 60); 
       const isComboFinal = sabor.isCombo !== undefined ? sabor.isCombo : isComboDef;
       const isOfertaFinal = sabor.isOferta !== undefined ? sabor.isOferta : isComboDef;
 
@@ -266,12 +280,14 @@ export default function App() {
     alert(`Mágica Feita! ${atualizadas} pizzas foram ajustadas.`);
   };
 
+  // IMPRESSÃO BLINDADA
   const imprimirPedido = (p) => {
+    if (!p) return;
     const janela = window.open('', '', 'width=300,height=600');
     janela.document.write(`
       <html>
         <head>
-          <title>Cupom #${String(p.id).slice(-4).toUpperCase()}</title>
+          <title>Cupom #${String(p.id || '').slice(-4).toUpperCase()}</title>
           <style>
             body { font-family: monospace; font-size: 14px; margin: 0; padding: 10px; width: 100%; max-width: 300px; color: black; }
             h1 { font-size: 18px; text-align: center; margin: 0 0 10px 0; }
@@ -285,35 +301,38 @@ export default function App() {
         </head>
         <body>
           <h1>${cfg.topo || 'A GRANDONNA'}</h1>
-          <div class="text-center margin-bot">PEDIDO #${String(p.id).slice(-4).toUpperCase()}</div>
-          <div class="text-center margin-bot">${new Date(p.timestamp).toLocaleDateString()} - ${new Date(p.timestamp).toLocaleTimeString()}</div>
+          <div class="text-center margin-bot">PEDIDO #${String(p.id || '').slice(-4).toUpperCase()}</div>
+          <div class="text-center margin-bot">${new Date(p.timestamp || Date.now()).toLocaleDateString()} - ${new Date(p.timestamp || Date.now()).toLocaleTimeString()}</div>
           <div class="divisor"></div>
           <div class="bold">CLIENTE:</div>
-          <div>${p.clientName}</div>
-          <div class="margin-bot">Tel: ${p.clientPhone}</div>
+          <div>${p.clientName || 'Cliente'}</div>
+          <div class="margin-bot">Tel: ${p.clientPhone || ''}</div>
           
           ${p.obs ? `<div class="obs-box">OBS: ${p.obs}</div>` : ''}
 
           <div class="divisor"></div>
           <div class="bold">${p.entrega === 'retirada' ? 'BALCAO / RETIRADA' : 'DELIVERY'}</div>
           ${p.entrega === 'entrega' ? `
-            <div class="margin-bot">${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}</div>
+            <div class="margin-bot">${p.end?.rua || ''}, ${p.end?.num || ''} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro || ''}</div>
             ${p.end?.distancia ? `<div>Distancia: ${p.end.distancia} km</div>` : ''}
             <div>Frete Cobrado: R$ ${p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end?.taxaCobrada || 0).toFixed(2)}</div>
           ` : ''}
           <div class="divisor"></div>
           <div class="bold margin-bot">ITENS:</div>
-          ${p.items?.map(it => `
-            <div class="flex bold"><span>${it.qtd ? it.qtd + 'x' : '1x'} ${it.name || (it.tipo === 'combo' ? 'Combo' : it.tipo === 'oferta' ? 'Oferta' : `PZ ${it.tamanho?.name}`)}</span><span>R$ ${Number(it.precoPizza || it.preco || 0).toFixed(2)}</span></div>
-            ${it.sabores ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px;">${it.sabores.map(s => '+ ' + s.name).join('<br>')}</div>` : ''}
-            ${it.bebidasCombo ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px; color: #555;">Bebidas: ${it.bebidasCombo.map(b => b.name).join(', ')}</div>` : ''}
-            ${it.borda ? `<div class="flex" style="font-size:12px; padding-left:10px; font-style: italic;"><span>+ Borda: ${it.borda.name}</span><span>R$ ${Number(it.borda.precoVendido || 0).toFixed(2)}</span></div>` : ''}
+          ${Array.isArray(p.items) ? p.items.map(it => {
+            if(!it) return '';
+            return `
+            <div class="flex bold"><span>${it.qtd ? it.qtd + 'x' : '1x'} ${it.name || (it.tipo === 'combo' ? 'Combo' : it.tipo === 'oferta' ? 'Oferta' : `PZ ${it.tamanho?.name || ''}`)}</span><span>R$ ${Number(it.precoPizza || it.preco || 0).toFixed(2)}</span></div>
+            ${Array.isArray(it.sabores) && it.sabores.length > 0 ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px;">${it.sabores.map(s => '+ ' + (s?.name||'')).join('<br>')}</div>` : ''}
+            ${Array.isArray(it.bebidasCombo) && it.bebidasCombo.length > 0 ? `<div style="font-size:12px; margin-bottom:2px; padding-left:10px; color: #555;">Bebidas: ${it.bebidasCombo.map(b => b?.name||'').join(', ')}</div>` : ''}
+            ${it.borda && typeof it.borda === 'object' ? `<div class="flex" style="font-size:12px; padding-left:10px; font-style: italic;"><span>+ Borda: ${it.borda.name||''}</span><span>R$ ${Number(it.borda.precoVendido || 0).toFixed(2)}</span></div>` : ''}
             ${(it.borda || it.tipo === 'combo' || it.tipo === 'oferta' || it.qtd > 1) ? `<div class="flex bold" style="font-size:12px; padding-left:10px; margin-bottom:8px; margin-top:2px; border-top: 1px dotted #ccc;"><span>Subtotal do Item:</span><span>R$ ${Number(it.preco || 0).toFixed(2)}</span></div>` : '<div style="margin-bottom:8px;"></div>'}
-          `).join('')}
+            `
+          }).join('') : ''}
           <div class="divisor"></div>
           <div class="flex bold" style="font-size: 16px;"><span>TOTAL:</span><span>R$ ${Number(p.total || 0).toFixed(2)}</span></div>
           <div class="divisor"></div>
-          <div class="margin-bot">Pagamento: ${p.pag === 'pix_app' ? 'PIX APP' : p.pag.toUpperCase()}</div>
+          <div class="margin-bot">Pagamento: ${p.pag === 'pix_app' ? 'PIX APP' : String(p.pag || '').toUpperCase()}</div>
           ${p.pag === 'dinheiro' && p.troco ? `<div class="bold">Levar Troco: R$ ${p.troco}</div>` : ''}
           <div class="divisor"></div>
           <div class="text-center margin-bot">Obrigado pela preferencia!</div>
@@ -327,12 +346,15 @@ export default function App() {
     janela.document.close();
   };
 
+  // ESTATÍSTICAS BLINDADAS
   const stats = useMemo(() => {
-    const pedsDoDia = pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroCaixa && p.status === 'entregue');
-    const total = pedsDoDia.reduce((a, b) => a + Number(b.total || 0), 0);
+    if (!Array.isArray(pedidos)) return { total: 0, qtd: 0, itens: [] };
+    const pedsDoDia = pedidos.filter(p => p && getDataLocalStr(p.timestamp) === filtroCaixa && p.status === 'entregue');
+    const total = pedsDoDia.reduce((a, b) => a + Number(b?.total || 0), 0);
     const contagem = {};
-    pedsDoDia.flatMap(p => p.items || []).forEach(i => {
-      const nome = i.name || (i.tipo === 'combo' ? `Combo ${i.tamanho?.name}` : i.tipo === 'oferta' ? `Oferta ${i.tamanho?.name}` : `PZ ${i.tamanho?.name || 'Pizza'}`);
+    pedsDoDia.flatMap(p => p?.items || []).forEach(i => {
+      if(!i) return;
+      const nome = i.name || (i.tipo === 'combo' ? `Combo ${i.tamanho?.name||''}` : i.tipo === 'oferta' ? `Oferta ${i.tamanho?.name||''}` : `PZ ${i.tamanho?.name || 'Pizza'}`);
       contagem[nome] = (contagem[nome] || 0) + (i.qtd || 1);
     });
     return { total, qtd: pedsDoDia.length, itens: Object.entries(contagem) };
@@ -374,10 +396,10 @@ export default function App() {
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
   };
 
-  // ===== FUNÇÕES E CÁLCULOS DO PDV INTERNO =====
+  // CÁLCULOS DO PDV
   const totalPDV = useMemo(() => {
-    const somaItens = pdvCart.reduce((acc, curr) => acc + Number(curr.preco || 0), 0);
-    const hasFreteGratis = pdvCart.some(i => i.tipo === 'oferta');
+    const somaItens = Array.isArray(pdvCart) ? pdvCart.reduce((acc, curr) => acc + Number(curr?.preco || 0), 0) : 0;
+    const hasFreteGratis = Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta');
     const taxaFrete = pdvEntrega === 'entrega' && !hasFreteGratis ? Number(pdvTaxa || 0) : 0;
     return somaItens + taxaFrete;
   }, [pdvCart, pdvEntrega, pdvTaxa]);
@@ -390,17 +412,17 @@ export default function App() {
     let name = '';
 
     if (pdvConfig.tipo === 'pizza') {
-        const listaPrecos = Array.isArray(pdvSelS) && pdvSelS.length > 0 ? pdvSelS.map(x => getPrecoSabor(x, pdvConfig.tamanho.id)) : [0];
+        const listaPrecos = Array.isArray(pdvSelS) && pdvSelS.length > 0 ? pdvSelS.map(x => getPrecoSabor(x, pdvConfig.tamanho?.id)) : [0];
         precoPizza = Math.max(...listaPrecos);
-        precoBorda = pdvSelBorda ? getPrecoBorda(pdvSelBorda, pdvConfig.tamanho.id) : 0;
+        precoBorda = pdvSelBorda ? getPrecoBorda(pdvSelBorda, pdvConfig.tamanho?.id) : 0;
         precoItem = precoPizza + precoBorda;
-        name = `Pizza ${pdvConfig.tamanho.name}`;
+        name = `Pizza ${pdvConfig.tamanho?.name || ''}`;
     } else if (pdvConfig.tipo === 'combo') {
-        precoItem = pdvConfig.item.price;
-        name = pdvConfig.item.name;
+        precoItem = Number(pdvConfig.item?.price || 0);
+        name = pdvConfig.item?.name || 'Combo';
     } else if (pdvConfig.tipo === 'oferta') {
-        precoItem = pdvConfig.item.price;
-        name = pdvConfig.item.name;
+        precoItem = Number(pdvConfig.item?.price || 0);
+        name = pdvConfig.item?.name || 'Oferta';
     }
 
     setPdvCart([...pdvCart, {
@@ -420,14 +442,14 @@ export default function App() {
   };
 
   const handlePdvDrinkQtd = (bebida, delta) => {
-    const existingIdx = pdvCart.findIndex(c => c.tipo === 'bebida' && c.itemId === bebida.id);
+    const existingIdx = (pdvCart || []).findIndex(c => c?.tipo === 'bebida' && c?.itemId === bebida?.id);
     if (existingIdx >= 0) {
       const newCart = [...pdvCart];
       const newQtd = newCart[existingIdx].qtd + delta;
       if (newQtd <= 0) newCart.splice(existingIdx, 1);
       else {
         newCart[existingIdx].qtd = newQtd;
-        newCart[existingIdx].preco = newQtd * (newCart[existingIdx].precoBase || bebida.price);
+        newCart[existingIdx].preco = newQtd * Number(newCart[existingIdx].precoBase || bebida.price || 0);
       }
       setPdvCart(newCart);
     } else if (delta > 0) {
@@ -438,18 +460,20 @@ export default function App() {
   };
 
   const lancarPedidoPDV = async () => {
-    if(pdvCart.length === 0) return alert("Carrinho vazio! Adicione algum produto.");
+    if(!pdvCart || pdvCart.length === 0) return alert("Carrinho vazio! Adicione algum produto.");
     if(!pdvNome.trim()) return alert("Digite o nome do cliente.");
+
+    const hasFreteGratis = pdvCart.some(i => i?.tipo === 'oferta');
 
     const novoPedido = {
       items: pdvCart,
       total: totalPDV,
       entrega: pdvEntrega,
-      end: pdvEntrega === 'entrega' ? { rua: pdvEnd, num: '', bairro: '', ref: '', distancia: 0, taxaCobrada: pdvCart.some(i => i.tipo === 'oferta') ? 0 : Number(pdvTaxa || 0) } : {},
+      end: pdvEntrega === 'entrega' ? { rua: pdvEnd, num: '', bairro: '', ref: '', distancia: 0, taxaCobrada: hasFreteGratis ? 0 : Number(pdvTaxa || 0) } : {},
       pag: pdvPag,
       troco: pdvTroco,
       obs: pdvObs,
-      freteGratis: pdvCart.some(i => i.tipo === 'oferta'),
+      freteGratis: hasFreteGratis,
       timestamp: Date.now(),
       status: 'pendente',
       userId: 'balcao_pdv',
@@ -466,18 +490,20 @@ export default function App() {
     }
   };
 
+  // RENDER DO CARD DE PEDIDO BLINDADO
   const renderPedidoCard = (p) => {
-    const isLatestForUser = pedidos.find(x => x.userId === p.userId)?.id === p.id;
-    const temAlerta = alertasChat.includes(p.userId) && isLatestForUser;
+    if (!p) return null;
+    const isLatestForUser = Array.isArray(pedidos) ? pedidos.find(x => x?.userId === p?.userId)?.id === p?.id : false;
+    const temAlerta = Array.isArray(alertasChat) && p?.userId ? alertasChat.includes(p.userId) && isLatestForUser : false;
 
     return (
-      <div key={p.id} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
+      <div key={p.id || Math.random()} className={`bg-white rounded-[40px] shadow-2xl border-t-8 p-6 flex flex-col gap-4 relative overflow-hidden ${p.status === 'pendente' ? 'border-red-600' : 'border-transparent shadow-gray-200'}`}>
         {p.status === 'pendente' && <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none"/>}
         
         <div className="flex justify-between border-b border-gray-50 pb-2 relative z-10">
           <div>
-            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id).slice(-4)}</span>
-            <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            <span className="font-black text-[10px] text-gray-400 tracking-widest uppercase block">Cod: {String(p.id || '').slice(-4)}</span>
+            <span className="text-[9px] font-bold text-gray-400">{new Date(p.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
           </div>
           <div className="flex gap-2">
             {p.status !== 'pendente' && (
@@ -485,7 +511,7 @@ export default function App() {
                 <Printer size={14}/>
               </button>
             )}
-            <button onClick={() => window.open(`https://wa.me/55${p.clientPhone}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
+            <button onClick={() => window.open(`https://wa.me/55${p.clientPhone || ''}`)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:scale-110 transition-transform shadow-sm" title="WhatsApp"><Phone size={14}/></button>
             <button onClick={() => setChatAberto({userId: p.userId, clientName: p.clientName || 'Cliente'})} 
               className={`p-2 rounded-xl transition-all shadow-sm flex items-center gap-1 ${temAlerta ? 'bg-red-600 text-white animate-pulse shadow-red-500/40' : 'bg-blue-50 text-blue-600 hover:scale-110'}`} title="Chat">
               <MessageCircle size={14}/>
@@ -502,32 +528,34 @@ export default function App() {
         <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
           <MapPin size={12} className="text-red-500 shrink-0 mt-0.5"/> 
           <div>
-            {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua}, ${p.end?.num} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro}`}
-            {p.entrega === 'entrega' && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end?.distancia} km | Taxa: R$ {p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end?.taxaCobrada || 0).toFixed(2)}</span>}
+            {p.entrega === 'retirada' ? 'BALCÃO / RETIRADA' : `${p.end?.rua || ''}, ${p.end?.num || ''} ${p.end?.ref ? `(${p.end.ref})` : ''} - ${p.end?.bairro || ''}`}
+            {p.entrega === 'entrega' && <span className="block text-[8px] text-blue-500 mt-1">KM Calculado: {p.end?.distancia || 0} km | Taxa: R$ {p.freteGratis ? '0.00 (GRÁTIS)' : Number(p.end?.taxaCobrada || 0).toFixed(2)}</span>}
           </div>
         </div>
         
         <div className="flex-1 py-2 space-y-3 border-y border-gray-50 relative z-10">
-          {p.items?.map((it, idx) => (
+          {Array.isArray(p.items) && p.items.map((it, idx) => {
+            if(!it) return null;
+            return (
             <div key={idx} className="flex flex-col border-b border-gray-50 pb-2 last:border-0">
               <div className="flex justify-between font-bold text-xs text-gray-800">
-                <span>{it.qtd ? it.qtd + 'x' : '1x'} {it.name || (it.tipo === 'combo' ? 'Combo' : it.tipo === 'oferta' ? 'Oferta' : `Pizza ${it.tamanho?.name}`)}</span>
+                <span>{it.qtd ? it.qtd + 'x' : '1x'} {it.name || (it.tipo === 'combo' ? 'Combo' : it.tipo === 'oferta' ? 'Oferta' : `Pizza ${it.tamanho?.name || ''}`)}</span>
                 <span className="text-gray-400">R$ {Number(it.precoPizza || it.preco || 0).toFixed(2)}</span>
               </div>
-              {it.sabores?.map((s, si) => (
+              {Array.isArray(it.sabores) && it.sabores.map((s, si) => (
                 <p key={si} className="text-[9px] text-red-600 font-bold italic leading-tight mt-1">
-                  + {s.name} <span className="text-gray-400 font-medium lowercase">({s.desc || s.description})</span>
+                  + {s?.name} <span className="text-gray-400 font-medium lowercase">({s?.desc || s?.description || ''})</span>
                 </p>
               ))}
               
-              {it.bebidasCombo && (
+              {Array.isArray(it.bebidasCombo) && it.bebidasCombo.length > 0 && (
                 <div className="text-[9px] text-blue-600 font-bold italic leading-tight mt-1 flex flex-col gap-0.5">
                   <span className="text-gray-500 uppercase">Incluso:</span>
-                  {it.bebidasCombo.map((b, bi) => <span key={bi}>+ {b.name}</span>)}
+                  {it.bebidasCombo.map((b, bi) => <span key={bi}>+ {b?.name}</span>)}
                 </div>
               )}
 
-              {it.borda && (
+              {it.borda && typeof it.borda === 'object' && (
                 <div className="flex justify-between items-center text-[9px] text-orange-500 font-bold italic leading-tight mt-1">
                   <span>+ Borda: {it.borda.name}</span>
                   <span>R$ {Number(it.borda.precoVendido || 0).toFixed(2)}</span>
@@ -539,7 +567,7 @@ export default function App() {
                 </div>
               ) : null}
             </div>
-          ))}
+          )})}
         </div>
 
         {p.obs && (
@@ -551,7 +579,7 @@ export default function App() {
 
         <div className="bg-gray-50 p-2 rounded-xl text-center border border-gray-100 relative z-10 mt-2">
           <span className="text-[9px] font-black uppercase text-gray-500">
-            Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : p.pag}</span>
+            Pagamento: <span className="text-gray-800">{p.pag === 'pix_app' ? 'PIX APP' : String(p.pag || '').toUpperCase()}</span>
             {p.pag === 'dinheiro' && p.troco && <span className="text-red-500"> (Troco p/ R$ {p.troco})</span>}
           </span>
         </div>
@@ -566,19 +594,6 @@ export default function App() {
         <div className="font-black text-green-600 text-center text-xl pt-2 relative z-10 border-t border-gray-50 mt-1">R$ {Number(p.total || 0).toFixed(2)}</div>
       </div>
     );
-  };
-
-  const getTabelaAtual = () => {
-    switch(aba) {
-      case 'sabores': return sabores;
-      case 'bordas': return bordas;
-      case 'combos': return combos;
-      case 'ofertas': return ofertas;
-      case 'bebidas': return bebidas;
-      case 'banners': return banners;
-      case 'equipe': return equipe;
-      default: return [];
-    }
   };
 
   if (!hasPerm) return (
@@ -598,7 +613,6 @@ export default function App() {
       <aside className="w-full md:w-64 bg-black text-white p-6 flex flex-col gap-4 shadow-2xl z-40 overflow-y-auto">
         <img src={cfg.logo} className="w-20 h-20 rounded-full mx-auto border-2 border-yellow-500 object-cover mb-2 shadow-lg"/>
         <nav className="space-y-1 flex-1">
-          {/* ABA PDV ADICIONADA COMO PRIMEIRA OPÇÃO */}
           {['pdv', 'pedidos', 'historico', 'sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'caixa', 'equipe', 'sistema'].map(m => (
             <button key={m} onClick={() => { setAba(m); setEdit(null); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-between transition-all ${aba === m ? 'bg-red-600 shadow-xl scale-105' : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'}`}>
               <div className="flex items-center gap-2">
@@ -616,9 +630,9 @@ export default function App() {
                 {m === 'sistema' && <Settings size={16}/>}
                 {m === 'pdv' ? 'PDV / NOVO PEDIDO' : m}
               </div>
-              {m === 'pedidos' && pedidos.filter(p => p.status === 'pendente').length > 0 && (
+              {m === 'pedidos' && Array.isArray(pedidos) && pedidos.filter(p => p?.status === 'pendente').length > 0 && (
                 <span className="bg-white text-red-600 px-2 rounded-full animate-bounce font-bold">
-                  {pedidos.filter(p => p.status === 'pendente').length}
+                  {pedidos.filter(p => p?.status === 'pendente').length}
                 </span>
               )}
             </button>
@@ -629,10 +643,9 @@ export default function App() {
 
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
         
-        {/* TELA DE PDV (PONTO DE VENDA) */}
+        {/* TELA DE PDV (PONTO DE VENDA) BLINDADA */}
         {aba === 'pdv' && (
           <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-80px)]">
-            {/* LADO ESQUERDO: CARDÁPIO */}
             <div className="flex-1 bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
                <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
                
@@ -645,7 +658,6 @@ export default function App() {
                </div>
 
                <div className="flex-1 overflow-y-auto pr-2 grid gap-3 align-top content-start">
-                  {/* Pizzas Tradicionais e Doces: Mostra Tamanhos */}
                   {['tradicionais', 'doces'].includes(pdvAba) && tamanhos.map(t => (
                      <div key={t.id} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', tamanho: t, maxFlavors: t.maxFlavors, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
                         <div className="flex items-center gap-4"><span className="text-3xl">{t.icon}</span><div><h4 className="font-black text-lg text-gray-800 uppercase">{t.name} {pdvAba === 'doces' ? 'Doce' : ''}</h4><p className="text-xs text-gray-500 font-bold">{t.description}</p></div></div>
@@ -653,11 +665,11 @@ export default function App() {
                      </div>
                   ))}
 
-                  {/* Combos */}
-                  {pdvAba === 'combos' && combos.map(c => {
+                  {pdvAba === 'combos' && Array.isArray(combos) && combos.map(c => {
+                     if(!c) return null;
                      const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
                      return (
-                       <div key={c.id} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={c.id || Math.random()} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
@@ -668,11 +680,11 @@ export default function App() {
                      )
                   })}
 
-                  {/* Ofertas */}
-                  {pdvAba === 'ofertas' && ofertas.map(o => {
+                  {pdvAba === 'ofertas' && Array.isArray(ofertas) && ofertas.map(o => {
+                     if(!o) return null;
                      const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
                      return (
-                       <div key={o.id} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={o.id || Math.random()} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
@@ -683,9 +695,10 @@ export default function App() {
                      )
                   })}
 
-                  {/* Bebidas */}
-                  {pdvAba === 'bebidas' && bebidas.map(b => (
-                     <div key={b.id} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
+                  {pdvAba === 'bebidas' && Array.isArray(bebidas) && bebidas.map(b => {
+                     if(!b) return null;
+                     return (
+                     <div key={b.id || Math.random()} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
                         <div>
                           <h4 className="font-black text-gray-800 uppercase">{b.name}</h4>
                           <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
@@ -695,24 +708,24 @@ export default function App() {
                            <button onClick={() => handlePdvDrinkQtd(b, 1)} className="w-10 h-10 bg-blue-600 rounded-xl text-white font-black flex items-center justify-center hover:bg-blue-700 shadow-md shadow-blue-500/30"><Plus size={18}/></button>
                         </div>
                      </div>
-                  ))}
+                  )})}
                </div>
             </div>
 
-            {/* LADO DIREITO: CARRINHO E LANÇAMENTO */}
             <div className="w-full xl:w-[450px] bg-gray-900 p-6 rounded-[40px] shadow-2xl border border-gray-800 flex flex-col h-full overflow-hidden">
                <h2 className="text-2xl font-black italic uppercase mb-4 text-white">Resumo do Pedido</h2>
                
-               {/* Lista do Carrinho PDV */}
                <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
-                  {pdvCart.map((i, idx) => (
+                  {Array.isArray(pdvCart) && pdvCart.map((i, idx) => {
+                    if(!i) return null;
+                    return (
                     <div key={idx} className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
                       <div className="flex justify-between items-start">
                         <div className="flex-1 pr-2">
                           <p className="font-bold text-white text-sm">{(i.qtd && i.qtd > 1) ? `${i.qtd}x ` : ''}{i.name}</p>
-                          {i.sabores && i.sabores.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{i.sabores.map(s => s.name).join(' + ')}</p>}
-                          {i.bebidasCombo && i.bebidasCombo.length > 0 && <p className="text-[10px] text-purple-400 italic mt-0.5">+ {i.bebidasCombo.map(b => b.name).join(', ')}</p>}
-                          {i.borda && <p className="text-[10px] text-orange-400 italic mt-0.5">+ Borda: {i.borda.name}</p>}
+                          {Array.isArray(i.sabores) && i.sabores.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{i.sabores.map(s => s?.name || '').join(' + ')}</p>}
+                          {Array.isArray(i.bebidasCombo) && i.bebidasCombo.length > 0 && <p className="text-[10px] text-purple-400 italic mt-0.5">+ {i.bebidasCombo.map(b => b?.name || '').join(', ')}</p>}
+                          {i.borda && typeof i.borda === 'object' && <p className="text-[10px] text-orange-400 italic mt-0.5">+ Borda: {i.borda.name || ''}</p>}
                         </div>
                         <div className="text-right">
                           <p className="text-yellow-500 font-black text-sm mb-2">R$ {Number(i.preco || 0).toFixed(2)}</p>
@@ -720,11 +733,10 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  ))}
-                  {pdvCart.length === 0 && <p className="text-center text-gray-600 font-bold uppercase mt-10">Carrinho Vazio</p>}
+                  )})}
+                  {(!pdvCart || pdvCart.length === 0) && <p className="text-center text-gray-600 font-bold uppercase mt-10">Carrinho Vazio</p>}
                </div>
 
-               {/* Campos do Cliente e Fechamento */}
                <div className="space-y-3 pt-4 border-t border-gray-800">
                  <div className="flex gap-2">
                    <input placeholder="Nome do Cliente" value={pdvNome} onChange={e=>setPdvNome(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
@@ -738,8 +750,8 @@ export default function App() {
 
                  {pdvEntrega === 'entrega' && (
                    <div className="flex gap-2">
-                     <input placeholder="Endereço Completo (Rua, Nº, Bairro)" value={pdvEnd} onChange={e=>setPdvEnd(e.target.value)} className="flex-[3] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>
-                     <input type="number" placeholder="Taxa R$" value={pdvTaxa} onChange={e=>setPdvTaxa(e.target.value)} disabled={pdvCart.some(i => i.tipo === 'oferta')} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-black outline-none focus:border-red-500 text-xs disabled:opacity-50"/>
+                     <input placeholder="Endereço (Rua, Nº, Bairro)" value={pdvEnd} onChange={e=>setPdvEnd(e.target.value)} className="flex-[3] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>
+                     <input type="number" placeholder="Taxa R$" value={pdvTaxa} onChange={e=>setPdvTaxa(e.target.value)} disabled={Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta')} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-black outline-none focus:border-red-500 text-xs disabled:opacity-50"/>
                    </div>
                  )}
 
@@ -749,7 +761,7 @@ export default function App() {
                      <option value="maquininha">Maquininha (Cartão)</option>
                      <option value="pix_app">PIX</option>
                    </select>
-                   {pdvPag === 'dinheiro' && <input placeholder="Troco para R$" value={pdvTroco} onChange={e=>setPdvTroco(e.target.value)} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>}
+                   {pdvPag === 'dinheiro' && <input placeholder="Troco p/ R$" value={pdvTroco} onChange={e=>setPdvTroco(e.target.value)} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>}
                  </div>
 
                  <input placeholder="Observação (Ex: Sem cebola, etc)" value={pdvObs} onChange={e=>setPdvObs(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-yellow-500 font-bold outline-none focus:border-yellow-500 text-xs"/>
@@ -767,7 +779,6 @@ export default function App() {
           </div>
         )}
 
-        {/* OUTRAS ABAS DO ADMIN */}
         {aba !== 'pdv' && (
           <header className="flex justify-between items-center mb-8 bg-white/50 backdrop-blur-sm p-4 rounded-3xl border border-white/50 shadow-sm">
             <h1 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900">{aba}</h1>
@@ -793,10 +804,10 @@ export default function App() {
 
         {aba === 'pedidos' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {pedidos
-              .filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr())
+            {Array.isArray(pedidos) && pedidos
+              .filter(p => p && (p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()))
               .map(renderPedidoCard)}
-            {pedidos.filter(p => p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr()).length === 0 && (
+            {Array.isArray(pedidos) && pedidos.filter(p => p && (p.status !== 'entregue' || getDataLocalStr(p.timestamp) === getDataLocalStr())).length === 0 && (
               <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido no momento.</p>
             )}
           </div>
@@ -809,8 +820,8 @@ export default function App() {
               <input type="date" className="bg-transparent font-black outline-none w-full text-gray-900" value={filtroHist} onChange={e => setFiltroHist(e.target.value)} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).map(renderPedidoCard)}
-              {pedidos.filter(p => getDataLocalStr(p.timestamp) === filtroHist).length === 0 && (
+              {Array.isArray(pedidos) && pedidos.filter(p => p && getDataLocalStr(p.timestamp) === filtroHist).map(renderPedidoCard)}
+              {Array.isArray(pedidos) && pedidos.filter(p => p && getDataLocalStr(p.timestamp) === filtroHist).length === 0 && (
                 <p className="col-span-full text-center text-gray-500 font-bold py-10 uppercase">Nenhum pedido encontrado nesta data.</p>
               )}
             </div>
@@ -823,8 +834,10 @@ export default function App() {
               <thead className="bg-gray-50 border-b text-[10px] font-black text-gray-400 uppercase">
                 <tr><th className="p-6">Item / Detalhes</th><th className="p-6">Preços / Informação</th><th className="p-6 text-right">Ações</th></tr>
               </thead>
-              <tbody>{getTabelaAtual().map(it => (
-                <tr key={it.id} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
+              <tbody>{getTabelaAtual().map(it => {
+                if(!it) return null;
+                return (
+                <tr key={it.id || Math.random()} className={`border-b border-gray-50 transition-all group ${it.isActive === false ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
                   <td className="p-6 flex items-center gap-4">
                     <div className="relative shrink-0">
                       {(it.img || it.imageUrl) ? (
@@ -883,7 +896,7 @@ export default function App() {
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
-                    {aba === 'bebidas' && it.price && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {Number(it.price || 0).toFixed(2)}</span>}
+                    {aba === 'bebidas' && it.price !== undefined && <span className={`font-bold px-2 py-1 rounded ${it.isActive === false ? 'text-gray-400 bg-gray-100' : 'text-green-600 bg-green-50'}`}>R$ {Number(it.price || 0).toFixed(2)}</span>}
                     
                     {aba === 'combos' && (
                       <div>
@@ -901,11 +914,11 @@ export default function App() {
 
                     {['sabores', 'bordas'].includes(aba) && it.prices && (
                       <div className="flex flex-wrap gap-1 max-w-[250px]">
-                        {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {it.prices.broto}</span>}
-                        {it.prices.grande > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gra: R$ {it.prices.grande}</span>}
-                        {it.prices.gigante > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gig: R$ {it.prices.gigante}</span>}
-                        {it.prices.meio_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1/2M: R$ {it.prices.meio_metro}</span>}
-                        {it.prices.um_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1M: R$ {it.prices.um_metro}</span>}
+                        {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {Number(it.prices.broto||0).toFixed(2)}</span>}
+                        {it.prices.grande > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gra: R$ {Number(it.prices.grande||0).toFixed(2)}</span>}
+                        {it.prices.gigante > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gig: R$ {Number(it.prices.gigante||0).toFixed(2)}</span>}
+                        {it.prices.meio_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1/2M: R$ {Number(it.prices.meio_metro||0).toFixed(2)}</span>}
+                        {it.prices.um_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1M: R$ {Number(it.prices.um_metro||0).toFixed(2)}</span>}
                       </div>
                     )}
                     {aba === 'equipe' && <span className="lowercase">{it.email}</span>}
@@ -926,7 +939,7 @@ export default function App() {
                     }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
                 </tr>
-              ))}</tbody>
+              )})}</tbody>
             </table>
           </div>
         )}
@@ -1096,111 +1109,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL DE EDIÇÃO E LANÇAMENTO PDV (SE EXISTIR CONF) */}
-      {pdvConfig && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-[200]">
-          <div className="bg-white rounded-[40px] w-full max-w-lg p-8 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-4 mb-4">
-              <h2 className="text-xl font-black uppercase italic text-gray-800">
-                {pdvConfig.tipo === 'pizza' ? `Montar Pizza ${pdvConfig.tamanho?.name}` : pdvConfig.item?.name}
-              </h2>
-              <button onClick={() => { setPdvConfig(null); setPdvSelS([]); setPdvSelBorda(null); setPdvSelBebidas([]); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-              {/* ESCOLHA DE SABORES */}
-              <div>
-                <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
-                  <span>Sabores ({pdvSelS.length} / {pdvConfig.maxFlavors})</span>
-                  {pdvSelS.length === pdvConfig.maxFlavors && <CheckCircle2 size={16} className="text-green-500"/>}
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {(() => {
-                    let lista = [];
-                    if (pdvConfig.tipo === 'combo') lista = sabores.filter(s => s.isCombo);
-                    else if (pdvConfig.tipo === 'oferta') lista = sabores.filter(s => s.isOferta);
-                    else lista = sabores.filter(s => pdvConfig.isDoce ? isPizzaDoce(s) : !isPizzaDoce(s));
-
-                    const validos = lista.filter(s => pdvConfig.tipo !== 'pizza' || getPrecoSabor(s, pdvConfig.tamanho?.id) > 0);
-
-                    return validos.map(s => {
-                      const isSel = pdvSelS.some(x => x.id === s.id);
-                      const isFull = !isSel && pdvSelS.length >= pdvConfig.maxFlavors;
-                      return (
-                        <div key={s.id} onClick={() => !isFull && (isSel ? setPdvSelS(pdvSelS.filter(x=>x.id!==s.id)) : setPdvSelS([...pdvSelS, s]))} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-red-500 bg-red-50' : isFull ? 'opacity-40 border-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
-                          <p className={`text-[10px] font-black uppercase leading-tight ${isSel ? 'text-red-600' : 'text-gray-700'}`}>{s.name}</p>
-                          {pdvConfig.tipo === 'pizza' && <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoSabor(s, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>}
-                        </div>
-                      )
-                    })
-                  })()}
-                </div>
-              </div>
-
-              {/* ESCOLHA DE BORDA (SÓ PARA PIZZA NORMAL) */}
-              {pdvConfig.tipo === 'pizza' && pdvSelS.length > 0 && bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).length > 0 && (
-                <div>
-                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3">Borda Recheada</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div onClick={() => setPdvSelBorda(null)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${!pdvSelBorda ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
-                      <p className={`text-[10px] font-black uppercase ${!pdvSelBorda ? 'text-orange-600' : 'text-gray-700'}`}>Sem Borda</p>
-                    </div>
-                    {bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).map(b => {
-                      const isSel = pdvSelBorda?.id === b.id;
-                      return (
-                        <div key={b.id} onClick={() => setPdvSelBorda(b)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                          <p className={`text-[10px] font-black uppercase ${isSel ? 'text-orange-600' : 'text-gray-700'}`}>{b.name}</p>
-                          <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoBorda(b, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* BEBIDAS (SÓ PARA COMBO) */}
-              {pdvConfig.tipo === 'combo' && pdvConfig.maxBebidas > 0 && pdvSelS.length > 0 && (
-                <div>
-                  <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
-                    <span>Bebidas Inclusas ({pdvSelBebidas.length} / {pdvConfig.maxBebidas})</span>
-                    {pdvSelBebidas.length === pdvConfig.maxBebidas && <CheckCircle2 size={16} className="text-purple-500"/>}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {bebidas.filter(b => b.isCombo).map(b => {
-                      const qtd = pdvSelBebidas.filter(x => x.id === b.id).length;
-                      return (
-                        <div key={b.id} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50 flex flex-col justify-between items-center gap-2">
-                          <p className="text-[10px] font-black text-gray-700 uppercase text-center leading-tight">{b.name}</p>
-                          <div className="flex items-center gap-2">
-                            {qtd > 0 && <button onClick={() => {
-                              const idx = pdvSelBebidas.findIndex(x => x.id === b.id);
-                              if(idx !== -1) { const n = [...pdvSelBebidas]; n.splice(idx, 1); setPdvSelBebidas(n); }
-                            }} className="w-6 h-6 bg-gray-300 rounded text-gray-700 font-bold flex justify-center items-center"><Minus size={12}/></button>}
-                            {qtd > 0 && <span className="text-[10px] font-black text-purple-600">{qtd}</span>}
-                            <button onClick={() => {
-                              if(pdvSelBebidas.length < pdvConfig.maxBebidas) setPdvSelBebidas([...pdvSelBebidas, b]);
-                            }} disabled={pdvSelBebidas.length >= pdvConfig.maxBebidas} className="w-6 h-6 bg-purple-600 rounded text-white font-bold flex justify-center items-center disabled:opacity-50"><Plus size={12}/></button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button 
-              onClick={addPdvItem}
-              disabled={pdvSelS.length === 0 || (pdvConfig.tipo === 'combo' && pdvSelBebidas.length < pdvConfig.maxBebidas)}
-              className="mt-6 w-full bg-red-600 text-white p-4 rounded-[20px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus size={18}/> Adicionar ao Pedido
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PADRÃO DE EDIÇÃO DAS OUTRAS ABAS */}
+      {/* MODAL DE EDIÇÃO (APENAS PARA ABAS COMUNS) */}
       {edit && !pdvConfig && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
