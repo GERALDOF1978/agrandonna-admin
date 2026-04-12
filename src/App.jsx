@@ -1289,7 +1289,7 @@ function MainApp() {
   );
 }
 
-export function AppContainer() {
+export default function App() {
   return (
     <ErrorBoundary>
       <MainApp />
