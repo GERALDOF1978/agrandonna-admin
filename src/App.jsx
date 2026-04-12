@@ -87,6 +87,7 @@ function MainApp() {
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
+  const [tamanhos] = useState(TAMANHOS_FIXOS); // CORREÇÃO: Variável de tamanhos adicionada!
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
@@ -451,7 +452,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now(), 
+        id: Date.now() + Math.random(),
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -479,7 +480,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -693,7 +694,7 @@ function MainApp() {
                      if(!c) return null;
                      const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
                      return (
-                       <div key={`combo-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`combo-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
@@ -708,7 +709,7 @@ function MainApp() {
                      if(!o) return null;
                      const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
                      return (
-                       <div key={`oferta-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`oferta-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
@@ -722,7 +723,7 @@ function MainApp() {
                   {pdvAba === 'bebidas' && Array.isArray(bebidas) && bebidas.map((b, idx) => {
                      if(!b) return null;
                      return (
-                     <div key={`bebida-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
+                     <div key={`bebida-item-${idx}`} className="bg-gray-50 p-4 rounded-3xl border border-gray-200 flex justify-between items-center">
                         <div>
                           <h4 className="font-black text-gray-800 uppercase">{b.name}</h4>
                           <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
@@ -1288,7 +1289,7 @@ function MainApp() {
   );
 }
 
-export default function App() {
+export function AppContainer() {
   return (
     <ErrorBoundary>
       <MainApp />
