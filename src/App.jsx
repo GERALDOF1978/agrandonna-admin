@@ -1062,11 +1062,11 @@ const salvar = async (e) => {
   onClick={() => {
     // Verificamos no console se o 'it.id' existe antes de abrir o modal
     console.log("ID capturado no clique:", it.id); 
-    setEdit({ 
-      ...it, 
-      idOriginal: it.id, 
-      pastaOriginal: getCollectionName(aba) 
-    });
+       setEdit({ 
+         ...it, 
+        id: it.id, // 🔥 ESSENCIAL (corrige duplicação)
+        pastaOriginal: getCollectionName(aba) 
+     });
   }} 
   className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"
 >
