@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, Component } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-// ✅ AQUI ESTAVA O CULPADO: Faltava o CheckCircle2 (o ícone de 'Concluído') nesta lista abaixo:
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle, CheckCircle2, Check } from 'lucide-react';
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 // SISTEMA ANTI-TELA BRANCA REAL
 class ErrorBoundary extends Component {
@@ -85,6 +84,7 @@ const isPizzaDoce = (sabor) => {
 
 function MainApp() {
   const [user, setUser] = useState(null);
+  const [currentUserData, setCurrentUserData] = useState(null); // <-- NOVO: DADOS DO ATENDENTE LOGADO
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
@@ -123,8 +123,9 @@ function MainApp() {
   const scrollRef = useRef(null);
   const qtdPendentes = useRef(0);
 
-  // PDV ESTADOS 
+  // PDV ESTADOS ATUALIZADOS
   const [pdvAba, setPdvAba] = useState('tradicionais');
+  const [pdvStep, setPdvStep] = useState('cart'); // <-- NOVO: Controla se mostra o Carrinho ou o Formulário de Pagamento
   const [pdvCart, setPdvCart] = useState([]);
   const [pdvNome, setPdvNome] = useState('');
   const [pdvTel, setPdvTel] = useState('');
@@ -168,17 +169,23 @@ function MainApp() {
   useEffect(() => {
     return onAuthStateChanged(auth, u => {
       if (u) {
-        if (u.email === OWNER_EMAIL) {
-          setUser(u); setHasPerm(true);
-        } else {
-          onSnapshot(collection(db, 'admin_users'), s => {
-            const lista = s.docs.map(d => d.data().email);
-            if (lista.includes(u.email)) { setUser(u); setHasPerm(true); } 
-            else { signOut(auth); alert("Acesso Negado!"); }
-          });
-        }
+        onSnapshot(collection(db, 'admin_users'), s => {
+          const lista = s.docs.map(d => d.data());
+          const emailsPermitidos = lista.map(x => x.email);
+          const userData = lista.find(x => x.email === u.email);
+
+          if (u.email === OWNER_EMAIL) { 
+            setUser(u); setHasPerm(true); 
+            setCurrentUserData({ nome: 'Dono / Admin', cargo: 'Admin', email: u.email, img: u.photoURL });
+          } else if (emailsPermitidos.includes(u.email)) { 
+            setUser(u); setHasPerm(true); 
+            setCurrentUserData(userData || { nome: 'Atendente', cargo: 'Atendente', email: u.email, img: u.photoURL });
+          } else { 
+            signOut(auth); alert("Acesso Negado!"); 
+          }
+        });
       } else {
-        setHasPerm(false); setUser(null);
+        setHasPerm(false); setUser(null); setCurrentUserData(null);
       }
     });
   }, []);
@@ -293,6 +300,8 @@ function MainApp() {
     if (!p) return;
     const timeStr = p?.timestamp ? new Date(p.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
     const dateStr = p?.timestamp ? new Date(p.timestamp).toLocaleDateString() : '--/--/----';
+    const atendenteStr = p?.atendente ? `<div class="margin-bot" style="font-size:12px; color:#555;">Atendente: ${p.atendente}</div>` : '';
+
     const janela = window.open('', '', 'width=300,height=600');
     janela.document.write(`
       <html>
@@ -313,6 +322,7 @@ function MainApp() {
           <h1>${cfg?.topo || 'A GRANDONNA'}</h1>
           <div class="text-center margin-bot">PEDIDO #${String(p.id || '').slice(-4).toUpperCase()}</div>
           <div class="text-center margin-bot">${dateStr} - ${timeStr}</div>
+          ${atendenteStr}
           <div class="divisor"></div>
           <div class="bold">CLIENTE:</div>
           <div>${p.clientName || 'Cliente'}</div>
@@ -486,13 +496,15 @@ function MainApp() {
       status: 'pendente',
       userId: 'balcao_pdv',
       clientName: pdvNome,
-      clientPhone: pdvTel || 'Balcão'
+      clientPhone: pdvTel || 'Balcão',
+      atendente: currentUserData?.nome || 'Sistema' // <-- SALVA O ATENDENTE NO PEDIDO
     };
 
     try {
       await addDoc(collection(db, 'pedidos'), novoPedido);
       alert("Pedido lançado com sucesso!");
       setPdvCart([]); setPdvNome(''); setPdvTel(''); setPdvEnd(''); setPdvTaxa(''); setPdvObs(''); setPdvTroco(''); setPdvEntrega('entrega');
+      setPdvStep('cart'); // Volta pra tela de carrinho
     } catch (e) {
       alert("Erro ao lançar pedido.");
     }
@@ -528,9 +540,12 @@ function MainApp() {
           </div>
         </div>
         
-        <div className="relative z-10">
-          <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p?.clientName || 'Cliente sem nome'}</div>
-          <div className="text-[10px] font-bold text-gray-500">{p?.clientPhone || 'Sem telefone'}</div>
+        <div className="relative z-10 flex justify-between items-start">
+          <div>
+            <div className="font-black uppercase text-sm text-gray-900 leading-tight">{p?.clientName || 'Cliente sem nome'}</div>
+            <div className="text-[10px] font-bold text-gray-500">{p?.clientPhone || 'Sem telefone'}</div>
+          </div>
+          {p?.atendente && <span className="text-[8px] bg-gray-100 text-gray-500 px-2 py-1 rounded-md font-bold uppercase border border-gray-200 text-right max-w-[100px] truncate" title={p.atendente}>👤 {p.atendente}</span>}
         </div>
 
         <div className="text-[10px] font-bold text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2 relative z-10">
@@ -646,18 +661,34 @@ function MainApp() {
             </button>
           ))}
         </nav>
-        <button onClick={() => signOut(auth)} className="text-gray-500 font-bold text-[10px] uppercase flex items-center gap-2 p-2 hover:text-red-500 transition-colors"><LogOut size={14}/> Sair</button>
+        
+        {/* PERFIL DO ATENDENTE NA BARRA LATERAL */}
+        {currentUserData && (
+          <div className="mt-auto border-t border-gray-800 pt-4 flex items-center gap-3 bg-gray-900/50 p-3 rounded-2xl">
+             {currentUserData.img ? (
+                <img src={currentUserData.img} className="w-10 h-10 rounded-full object-cover border border-gray-700"/>
+             ) : (
+                <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center text-gray-500 border border-gray-700"><User size={20}/></div>
+             )}
+             <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-black text-white truncate">{currentUserData.nome || 'Atendente'}</p>
+                <p className="text-[9px] font-bold uppercase text-red-500 tracking-widest">{currentUserData.cargo || 'Sistema'}</p>
+             </div>
+          </div>
+        )}
+
+        <button onClick={() => signOut(auth)} className="text-gray-500 font-bold text-[10px] uppercase flex items-center gap-2 p-2 hover:text-red-500 transition-colors mt-2"><LogOut size={14}/> Sair</button>
       </aside>
 
       <main className={`flex-1 p-4 md:p-10 overflow-y-auto transition-colors duration-300 ${['pedidos','historico'].includes(aba) ? 'bg-gray-300' : 'bg-gray-50'}`}>
         
         {aba === 'pdv' && (
           <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-80px)]">
+            {/* LADO ESQUERDO: CARDÁPIO (MANTIDO) */}
             <div className="flex-1 bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
                <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
                
-               {/* MENU DE CATEGORIAS DINÂMICO E QUEBRA DE LINHA (FLEX-WRAP) */}
-               <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-4 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+               <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-4 mb-4">
                  {(() => {
                    const abas = [];
                    if ((sabores || []).some(s => s && s.isPromo)) abas.push('promocoes');
@@ -667,7 +698,7 @@ function MainApp() {
                    if ((bebidas || []).length > 0) abas.push('bebidas');
                    
                    return abas.map((t, idx) => (
-                     <button key={`aba-${idx}`} onClick={()=>setPdvAba(t)} className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                     <button key={`aba-${idx}`} onClick={()=>{setPdvAba(t); setPdvStep('cart');}} className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                        {t === 'promocoes' ? '🔥 Promoções' : t}
                      </button>
                    ));
@@ -675,7 +706,6 @@ function MainApp() {
                </div>
 
                <div className="flex-1 overflow-y-auto pr-2 grid gap-3 align-top content-start">
-                  {/* TAMANHOS ESCONDENDO AS CATEGORIAS VAZIAS */}
                   {['tradicionais', 'doces', 'promocoes'].includes(pdvAba) && (tamanhos || []).map((t, idx) => {
                      const validFlavors = (sabores || []).filter(s => {
                         if (!s) return false;
@@ -685,10 +715,10 @@ function MainApp() {
                         return Number(s.prices?.[t.id] || 0) > 0;
                      });
 
-                     if (validFlavors.length === 0) return null; // A MÁGICA DE ESCONDER O QUE NÃO TEM PREÇO!
+                     if (validFlavors.length === 0) return null;
 
                      return (
-                       <div key={`tam-${idx}`} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', isPromoOnly: pdvAba === 'promocoes', tamanho: t, maxFlavors: t.maxFlavors, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`tam-${idx}`} onClick={() => {setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', isPromoOnly: pdvAba === 'promocoes', tamanho: t, maxFlavors: t.maxFlavors, item: null }); setPdvStep('cart');}} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div className="flex items-center gap-4"><span className="text-3xl">{t.icon}</span><div><h4 className="font-black text-lg text-gray-800 uppercase">{t.name} {pdvAba === 'doces' ? 'Doce' : ''}</h4><p className="text-xs text-gray-500 font-bold">{t.description}</p></div></div>
                           <Plus size={24} className="text-gray-300 group-hover:text-red-500"/>
                        </div>
@@ -699,7 +729,7 @@ function MainApp() {
                      if(!c) return null;
                      const tamRef = (tamanhos || []).find(t => t && t.id === c.tamanhoId);
                      return (
-                       <div key={c.id || `combo-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={c.id || `combo-item-${idx}`} onClick={() => {setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 }); setPdvStep('cart');}} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest bg-purple-200/50 px-2 py-1 rounded-md mb-2 inline-block">Combo Fechado</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{c.name}</h4>
@@ -714,7 +744,7 @@ function MainApp() {
                      if(!o) return null;
                      const tamRef = (tamanhos || []).find(t => t && t.id === o.tamanhoId);
                      return (
-                       <div key={o.id || `oferta-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={o.id || `oferta-item-${idx}`} onClick={() => {setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 }); setPdvStep('cart');}} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
                             <span className="text-[10px] font-black uppercase text-green-600 tracking-widest bg-green-200/50 px-2 py-1 rounded-md mb-2 inline-block">Frete Grátis</span>
                             <h4 className="font-black text-lg text-gray-800 uppercase">{o.name}</h4>
@@ -734,77 +764,120 @@ function MainApp() {
                           <p className="text-xs text-blue-600 font-bold mt-1">R$ {Number(b.price || 0).toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                           <button onClick={() => handlePdvDrinkQtd(b, -1)} className="w-10 h-10 bg-gray-200 rounded-xl text-gray-600 font-black flex items-center justify-center hover:bg-gray-300"><Minus size={18}/></button>
-                           <button onClick={() => handlePdvDrinkQtd(b, 1)} className="w-10 h-10 bg-blue-600 rounded-xl text-white font-black flex items-center justify-center hover:bg-blue-700 shadow-md shadow-blue-500/30"><Plus size={18}/></button>
+                           <button onClick={() => {handlePdvDrinkQtd(b, -1); setPdvStep('cart');}} className="w-10 h-10 bg-gray-200 rounded-xl text-gray-600 font-black flex items-center justify-center hover:bg-gray-300"><Minus size={18}/></button>
+                           <button onClick={() => {handlePdvDrinkQtd(b, 1); setPdvStep('cart');}} className="w-10 h-10 bg-blue-600 rounded-xl text-white font-black flex items-center justify-center hover:bg-blue-700 shadow-md shadow-blue-500/30"><Plus size={18}/></button>
                         </div>
                      </div>
                   )})}
                </div>
             </div>
 
-            <div className="w-full xl:w-[450px] bg-gray-900 p-6 rounded-[40px] shadow-2xl border border-gray-800 flex flex-col h-full overflow-hidden">
-               <h2 className="text-2xl font-black italic uppercase mb-4 text-white">Resumo do Pedido</h2>
+            {/* LADO DIREITO: CARRINHO E CHECKOUT DIVIDIDO */}
+            <div className="w-full xl:w-[450px] bg-gray-900 p-6 rounded-[40px] shadow-2xl border border-gray-800 flex flex-col h-full overflow-hidden relative">
                
-               <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
-                  {Array.isArray(pdvCart) && pdvCart.map((i, idx) => {
-                    if(!i) return null;
-                    return (
-                    <div key={`pdv-cart-${i.id || idx}`} className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 pr-2">
-                          <p className="font-bold text-white text-sm">{(i.qtd && i.qtd > 1) ? `${i.qtd}x ` : ''}{i.name}</p>
-                          {Array.isArray(i.sabores) && i.sabores.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{i.sabores.map(s => s?.name || '').join(' + ')}</p>}
-                          {Array.isArray(i.bebidasCombo) && i.bebidasCombo.length > 0 && <p className="text-[10px] text-purple-400 italic mt-0.5">+ {i.bebidasCombo.map(b => b?.name || '').join(', ')}</p>}
-                          {i.borda && typeof i.borda === 'object' && <p className="text-[10px] text-orange-400 italic mt-0.5">+ Borda: {i.borda.name || ''}</p>}
+               {pdvStep === 'cart' ? (
+                 // TELA 1: APENAS O CARRINHO GIGANTE E BOTOÕES DE DELIVERY/BALCAO
+                 <div className="flex flex-col h-full animate-in fade-in">
+                   <h2 className="text-2xl font-black italic uppercase mb-4 text-white flex items-center justify-between border-b border-gray-800 pb-4">
+                     <span className="flex items-center gap-2"><ShoppingBag className="text-yellow-500"/> Resumo</span>
+                     {pdvCart.length > 0 && <span className="bg-red-600 text-white text-[10px] px-3 py-1 rounded-full">{pdvCart.reduce((a,b)=>a+(b.qtd||1),0)} ITENS</span>}
+                   </h2>
+                   
+                   <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
+                      {Array.isArray(pdvCart) && pdvCart.map((i, idx) => {
+                        if(!i) return null;
+                        return (
+                        <div key={`pdv-cart-${i.id || idx}`} className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 pr-2">
+                              <p className="font-bold text-white text-sm">{(i.qtd && i.qtd > 1) ? `${i.qtd}x ` : ''}{i.name}</p>
+                              {Array.isArray(i.sabores) && i.sabores.length > 0 && <p className="text-[10px] text-gray-400 mt-1">{i.sabores.map(s => s?.name || '').join(' + ')}</p>}
+                              {Array.isArray(i.bebidasCombo) && i.bebidasCombo.length > 0 && <p className="text-[10px] text-purple-400 italic mt-0.5">+ {i.bebidasCombo.map(b => b?.name || '').join(', ')}</p>}
+                              {i.borda && typeof i.borda === 'object' && <p className="text-[10px] text-orange-400 italic mt-0.5">+ Borda: {i.borda.name || ''}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-yellow-500 font-black text-sm mb-2">R$ {Number(i.preco || 0).toFixed(2)}</p>
+                              <button onClick={() => setPdvCart(pdvCart.filter(x => x.id !== i.id))} className="text-red-500 hover:text-red-400 p-1 bg-red-500/10 rounded-lg"><Trash2 size={14}/></button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-yellow-500 font-black text-sm mb-2">R$ {Number(i.preco || 0).toFixed(2)}</p>
-                          <button onClick={() => setPdvCart(pdvCart.filter(x => x.id !== i.id))} className="text-red-500 hover:text-red-400 p-1 bg-red-500/10 rounded-lg"><Trash2 size={14}/></button>
+                      )})}
+                      {(!pdvCart || pdvCart.length === 0) && (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-600 space-y-4 pt-10">
+                           <ShoppingBag size={48} className="opacity-20"/>
+                           <p className="font-bold uppercase tracking-widest text-xs">Carrinho Vazio</p>
                         </div>
-                      </div>
-                    </div>
-                  )})}
-                  {(!pdvCart || pdvCart.length === 0) && <p className="text-center text-gray-600 font-bold uppercase mt-10">Carrinho Vazio</p>}
-               </div>
-
-               <div className="space-y-3 pt-4 border-t border-gray-800">
-                 <div className="flex gap-2">
-                   <input placeholder="Nome do Cliente" value={pdvNome} onChange={e=>setPdvNome(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
-                   <input placeholder="WhatsApp" value={pdvTel} onChange={e=>setPdvTel(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
-                 </div>
-                 
-                 <div className="flex bg-black p-1 rounded-xl border border-gray-700">
-                   <button onClick={()=>setPdvEntrega('entrega')} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${pdvEntrega === 'entrega' ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Delivery</button>
-                   <button onClick={()=>setPdvEntrega('retirada')} className={`flex-1 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${pdvEntrega === 'retirada' ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>Balcão</button>
-                 </div>
-
-                 {pdvEntrega === 'entrega' && (
-                   <div className="flex gap-2">
-                     <input placeholder="Endereço (Rua, Nº, Bairro)" value={pdvEnd} onChange={e=>setPdvEnd(e.target.value)} className="flex-[3] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>
-                     <input type="number" placeholder="Taxa R$" value={pdvTaxa} onChange={e=>setPdvTaxa(e.target.value)} disabled={Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta')} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-black outline-none focus:border-red-500 text-xs disabled:opacity-50"/>
+                      )}
                    </div>
-                 )}
 
-                 <div className="flex gap-2">
-                   <select value={pdvPag} onChange={e=>setPdvPag(e.target.value)} className="flex-[2] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs">
-                     <option value="dinheiro">Dinheiro</option>
-                     <option value="maquininha">Maquininha (Cartão)</option>
-                     <option value="pix_app">PIX</option>
-                   </select>
-                   {pdvPag === 'dinheiro' && <input placeholder="Troco p/ R$" value={pdvTroco} onChange={e=>setPdvTroco(e.target.value)} className="flex-[1] p-3 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-xs"/>}
+                   <div className="pt-4 border-t border-gray-800">
+                      <div className="flex items-center justify-between mb-4 bg-black/40 p-4 rounded-2xl">
+                        <span className="text-gray-400 font-black uppercase text-xs tracking-widest">Total S/ Taxa:</span>
+                        <span className="text-3xl font-black text-green-500">R$ {Number(totalPDV || 0).toFixed(2)}</span>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <button onClick={() => { if(pdvCart.length===0) return alert("Adicione produtos primeiro!"); setPdvEntrega('entrega'); setPdvStep('checkout'); }} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-5 rounded-[20px] font-black uppercase text-sm shadow-lg shadow-red-600/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-1">
+                          <MapPin size={20}/> Delivery
+                        </button>
+                        <button onClick={() => { if(pdvCart.length===0) return alert("Adicione produtos primeiro!"); setPdvEntrega('retirada'); setPdvStep('checkout'); }} className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black py-5 rounded-[20px] font-black uppercase text-sm shadow-lg shadow-yellow-500/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-1">
+                          <Store size={20}/> Balcão
+                        </button>
+                      </div>
+                   </div>
                  </div>
+               ) : (
+                 // TELA 2: FORMULÁRIO DE CHECKOUT (NOME, ENDEREÇO, PAGAMENTO)
+                 <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-300">
+                   <button onClick={() => setPdvStep('cart')} className="text-gray-400 hover:text-white flex items-center gap-2 mb-4 font-bold text-[10px] uppercase tracking-widest"><ArrowLeft size={14}/> Voltar ao Resumo</button>
+                   
+                   <h2 className="text-2xl font-black italic uppercase mb-4 text-white flex justify-between items-center border-b border-gray-800 pb-4">
+                     Pagamento
+                     <span className={`text-[10px] px-3 py-1 rounded-full ${pdvEntrega === 'entrega' ? 'bg-red-600 text-white' : 'bg-yellow-500 text-black'}`}>{pdvEntrega === 'entrega' ? 'Delivery' : 'Balcão'}</span>
+                   </h2>
 
-                 <input placeholder="Observação (Ex: Sem cebola, etc)" value={pdvObs} onChange={e=>setPdvObs(e.target.value)} className="w-full p-3 bg-black border border-gray-700 rounded-xl text-yellow-500 font-bold outline-none focus:border-yellow-500 text-xs"/>
+                   <div className="flex-1 overflow-y-auto space-y-3 pr-2 pb-4">
+                     <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 space-y-3">
+                       <input placeholder="Nome do Cliente" value={pdvNome} onChange={e=>setPdvNome(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
+                       <input placeholder="WhatsApp / Telefone" value={pdvTel} onChange={e=>setPdvTel(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>
+                     </div>
 
-                 <div className="pt-2 flex items-center justify-between">
-                    <span className="text-gray-400 font-black uppercase text-xs">Total:</span>
-                    <span className="text-2xl font-black text-green-500">R$ {Number(totalPDV || 0).toFixed(2)}</span>
+                     {pdvEntrega === 'entrega' && (
+                       <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 space-y-3">
+                         <textarea placeholder="Endereço Completo (Rua, Nº, Bairro, Ref)" value={pdvEnd} onChange={e=>setPdvEnd(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm resize-none h-24"/>
+                         <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black text-gray-400 uppercase w-20">Taxa R$:</span>
+                            <input type="number" placeholder="Ex: 8.00" value={pdvTaxa} onChange={e=>setPdvTaxa(e.target.value)} disabled={Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta')} className="flex-1 p-4 bg-black border border-gray-700 rounded-xl text-white font-black outline-none focus:border-red-500 text-sm disabled:opacity-50"/>
+                         </div>
+                         {Array.isArray(pdvCart) && pdvCart.some(i => i?.tipo === 'oferta') && <p className="text-[9px] text-green-500 font-bold uppercase text-right">Taxa Isenta (Oferta Ativa)</p>}
+                       </div>
+                     )}
+
+                     <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 space-y-3">
+                       <select value={pdvPag} onChange={e=>setPdvPag(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm appearance-none">
+                         <option value="dinheiro">💵 Dinheiro</option>
+                         <option value="maquininha">💳 Maquininha (Cartão)</option>
+                         <option value="pix_app">📱 PIX (Chave/App)</option>
+                       </select>
+                       {pdvPag === 'dinheiro' && <input type="number" placeholder="Levar Troco para R$?" value={pdvTroco} onChange={e=>setPdvTroco(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-white font-bold outline-none focus:border-red-500 text-sm"/>}
+                     </div>
+
+                     <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700">
+                       <input placeholder="Observação (Ex: Sem cebola, etc)" value={pdvObs} onChange={e=>setPdvObs(e.target.value)} className="w-full p-4 bg-black border border-gray-700 rounded-xl text-yellow-500 font-bold outline-none focus:border-yellow-500 text-sm"/>
+                     </div>
+                   </div>
+
+                   <div className="pt-4 border-t border-gray-800">
+                      <div className="flex items-center justify-between mb-4 bg-black/40 p-4 rounded-2xl">
+                        <span className="text-gray-400 font-black uppercase text-xs tracking-widest">Total Final:</span>
+                        <span className="text-3xl font-black text-green-500">R$ {Number(totalPDV || 0).toFixed(2)}</span>
+                      </div>
+                      <button onClick={lancarPedidoPDV} className="w-full bg-green-600 hover:bg-green-500 text-white py-5 rounded-[20px] font-black uppercase tracking-widest flex justify-center items-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-600/20 text-lg">
+                        <Send size={20}/> Confirmar e Imprimir
+                      </button>
+                   </div>
                  </div>
-
-                 <button onClick={lancarPedidoPDV} className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest flex justify-center items-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-600/20">
-                   <Send size={18}/> Lançar e Imprimir
-                 </button>
-               </div>
+               )}
             </div>
           </div>
         )}
@@ -824,7 +897,7 @@ function MainApp() {
                   aba === 'combos' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', qtdBebidas: 1, img: '', isActive: true } :
                   aba === 'ofertas' ? { name: '', desc: '', price: 0, tamanhoId: 'gigante', img: '', isActive: true } :
                   aba === 'bebidas' ? { name: '', price: 0, img: '', isActive: true, isCombo: false } :
-                  aba === 'equipe' ? { nome: '', email: '' } :
+                  aba === 'equipe' ? { nome: '', email: '', cargo: 'Atendente', img: '' } :
                   { title: '', imageUrl: '' }
                 );
               }} className="bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-green-700 active:scale-95 transition-all">Novo {aba}</button>
@@ -923,6 +996,8 @@ function MainApp() {
                           {it.desc || it.description || (aba === 'sabores' ? '⚠️ Sem ingredientes.' : '⚠️ Sem descrição.')}
                         </p>
                       )}
+                      
+                      {aba === 'equipe' && <p className="text-[10px] font-black uppercase text-gray-500 mt-1">{it.cargo || 'Atendente'}</p>}
                     </div>
                   </td>
                   <td className="p-6 font-black text-[10px] text-gray-500 uppercase">
@@ -1139,15 +1214,22 @@ function MainApp() {
         )}
       </main>
 
-      {/* MODAL DE EDIÇÃO (APENAS PARA ABAS COMUNS) */}
+      {/* MODAL DE EDIÇÃO */}
       {edit && !pdvConfig && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex justify-center items-center p-4 z-[100]">
           <form onSubmit={salvar} className="bg-white rounded-[50px] w-full max-w-lg p-10 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h2 className="text-2xl font-black uppercase italic border-b pb-4 flex justify-between items-center text-gray-800 tracking-tighter">Configurar {aba} <button type="button" onClick={() => setEdit(null)}><X size={30} className="text-gray-300 hover:text-black"/></button></h2>
             
-            {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners'].includes(aba) && (
+            {/* UPLOAD DE IMAGEM INCLUINDO EQUIPE */}
+            {['sabores', 'bordas', 'bebidas', 'combos', 'ofertas', 'banners', 'equipe'].includes(aba) && (
               <div className="flex flex-col items-center gap-4 p-4 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
-                 {aba !== 'bordas' && <img src={edit.img || edit.imageUrl || cfg?.logo || LOGO} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />}
+                 {aba !== 'bordas' && (
+                    edit.img || edit.imageUrl ? (
+                        <img src={edit.img || edit.imageUrl} className="w-28 h-28 rounded-[28px] object-cover shadow-xl border-4 border-white" />
+                    ) : (
+                        <div className="w-28 h-28 rounded-[28px] bg-gray-200 flex items-center justify-center text-gray-400 border-4 border-white"><User size={40}/></div>
+                    )
+                 )}
                  <label className="bg-black text-white px-6 py-2 rounded-2xl text-[10px] font-black cursor-pointer hover:bg-red-600 transition-all flex gap-2 items-center uppercase">
                    {isUp ? <Loader2 className="animate-spin" size={14}/> : <Upload size={14}/>} {isUp ? 'Aguarde...' : 'Subir Foto'}
                    <input type="file" className="hidden" onChange={async e => await handleImg(e.target.files[0], (url) => setEdit({ ...edit, [aba === 'banners' ? 'imageUrl' : 'img']: url }))} />
@@ -1247,7 +1329,20 @@ function MainApp() {
               )}
               
               {aba === 'bebidas' && <input type="number" step="0.01" placeholder="Preço Normal" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.price || 0} onChange={e => setEdit({ ...edit, price: parseFloat(e.target.value) })}/>}
-              {aba === 'equipe' && <input placeholder="E-mail" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email || ''} onChange={e => setEdit({ ...edit, email: e.target.value })} />}
+              
+              {aba === 'equipe' && (
+                <>
+                  <input placeholder="E-mail GMAIL Autorizado" type="email" className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.email || ''} onChange={e => setEdit({ ...edit, email: e.target.value })} />
+                  <div>
+                    <label className="text-[10px] uppercase font-black text-gray-400 px-3">Cargo no Sistema</label>
+                    <select className="w-full p-5 bg-gray-50 border border-gray-100 rounded-3xl font-bold outline-none focus:border-red-500" value={edit.cargo || 'Atendente'} onChange={e => setEdit({...edit, cargo: e.target.value})}>
+                      <option value="Atendente">Atendente</option>
+                      <option value="Gerente">Gerente</option>
+                      <option value="Admin">Administrador</option>
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
             
             <button type="submit" disabled={isUp} className="w-full bg-green-600 text-white p-6 rounded-[30px] font-black uppercase shadow-xl hover:bg-green-700 active:scale-95 disabled:opacity-50 transition-all">Confirmar Alterações</button>
@@ -1255,7 +1350,7 @@ function MainApp() {
         </div>
       )}
 
-      {/* MODAL DO PDV */}
+      {/* MODAL DO PDV - ESCOLHER SABORES */}
       {pdvConfig && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex justify-center items-center p-4 z-[200]">
           <div className="bg-white rounded-[40px] w-full max-w-lg p-8 shadow-2xl flex flex-col max-h-[90vh]">
