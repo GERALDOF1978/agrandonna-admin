@@ -204,14 +204,54 @@ function MainApp() {
       setPedidos(data || []);
     });
 
-    const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
-    const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => setCombos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubOfertas = onSnapshot(collection(db, 'menu_ofertas'), s => setOfertas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
-    const unsubN = onSnapshot(collection(db, 'menu_banners'), s => setBanners(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubE = onSnapshot(collection(db, 'admin_users'), s => setEquipe(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
+const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => 
+  setSabores(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => 
+  setBordas(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => 
+  setBebidas(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => 
+  setCombos(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubOfertas = onSnapshot(collection(db, 'menu_ofertas'), s => 
+  setOfertas(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubN = onSnapshot(collection(db, 'menu_banners'), s => 
+  setBanners(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
+
+const unsubE = onSnapshot(collection(db, 'admin_users'), s => 
+  setEquipe(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id
+  })))
+);
     const unsubC = onSnapshot(doc(db, 'loja_config', 'geral'), s => {
       if(s.exists()){
         const data = s.data() || {};
