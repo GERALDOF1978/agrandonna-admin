@@ -392,39 +392,39 @@ function MainApp() {
 const salvar = async (e) => {
   e.preventDefault();
   
-  // 1. Pegamos a pasta e o ID que o botão de editar "carimbou"
+  // 1. Pegamos os dados e os endereços
   const pastaDestino = edit.pastaOriginal || getCollectionName(aba);
-  const idOriginal = edit.idOriginal || edit.id;
+  const idParaGravar = edit.idOriginal || edit.id; 
 
-  // LOG DE DEBUG: Aperte F12 no navegador para ver isso
-  console.log("Tentando salvar na pasta:", pastaDestino);
-  console.log("ID detectado:", idOriginal);
+  // --- O VERIFICADOR (ALERTA DE SEGURANÇA) ---
+  // Se isso aqui aparecer como "null" ou "undefined", o erro está no seu BOTÃO de editar.
+  if (!idParaGravar && edit.id !== undefined) {
+     console.log("DADOS DO OBJETO EDIT NO MOMENTO:", edit);
+  }
 
-  // 2. Criamos uma cópia dos dados para não sujar o Firebase
-  const dadosParaEnviar = { ...edit };
-  delete dadosParaEnviar.id;
-  delete dadosParaEnviar.idOriginal;
-  delete dadosParaEnviar.pastaOriginal;
+  // 2. Criamos uma cópia limpa para enviar ao Firebase
+  const dadosLimpos = { ...edit };
+  delete dadosLimpos.id;
+  delete dadosLimpos.idOriginal;
+  delete dadosLimpos.pastaOriginal;
 
   try {
-    if (idOriginal) {
-      // 🟢 MODO EDIÇÃO (UPDATE)
-      // Usamos setDoc com o endereço EXATO do documento.
-      // Se o ID for 'sabor_1', ele vai SOBRESCREVER o 'sabor_1' e não criar outro.
-      const docRef = doc(db, pastaDestino, String(idOriginal));
-      await setDoc(docRef, dadosParaEnviar, { merge: true });
-      alert("Sucesso: Produto atualizado!");
+    // 3. A LÓGICA INFALÍVEL
+    if (idParaGravar) {
+      // EDITAR (UPDATE): doc(db, pasta, ID) obriga o Firebase a ir no registro que já existe.
+      const docRef = doc(db, pastaDestino, String(idParaGravar));
+      await setDoc(docRef, dadosLimpos, { merge: true });
+      alert("✅ SUCESSO: O item " + idParaGravar + " foi EDITADO.");
     } else {
-      // 🔵 MODO NOVO (CREATE)
-      // Se não existe ID, aí sim ele cria um do zero com ID aleatório
-      await addDoc(collection(db, pastaDestino), { ...dadosParaEnviar, isActive: true });
-      alert("Sucesso: Novo produto criado!");
+      // CRIAR NOVO (CREATE): Só entra aqui se idParaGravar for VAZIO.
+      await addDoc(collection(db, pastaDestino), { ...dadosLimpos, isActive: true });
+      alert("🆕 SUCESSO: Um NOVO item foi criado (porque não achei o ID).");
     }
-    
+
     setEdit(null); // Fecha o modal
   } catch (err) {
-    console.error("Erro ao salvar:", err);
-    alert("Erro no Firebase: " + err.message);
+    console.error("ERRO CRÍTICO NO FIREBASE:", err);
+    alert("❌ ERRO: " + err.message);
   }
 };
 
