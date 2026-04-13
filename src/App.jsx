@@ -87,6 +87,7 @@ function MainApp() {
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
+  const [tamanhos] = useState(TAMANHOS_FIXOS); // <--- AQUI ESTÁ O HERÓI QUE FALTAVA
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
@@ -451,7 +452,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now() + Math.random(),
+        id: Date.now(), 
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -479,7 +480,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -1393,7 +1394,6 @@ function MainApp() {
     </div>
   );
 }
-
 
 export default function App() {
   return (
