@@ -392,32 +392,39 @@ function MainApp() {
 const salvar = async (e) => {
   e.preventDefault();
   
-  // 1. Pega os dados que o botão 'carimbou'
+  // 1. Pegamos a pasta e o ID que o botão de editar "carimbou"
   const pastaDestino = edit.pastaOriginal || getCollectionName(aba);
-  const idOriginal = edit.idOriginal || edit.id; 
+  const idOriginal = edit.idOriginal || edit.id;
 
-  // 2. Faz uma cópia limpa para o Firebase (sem campos de controle)
-  const dadosParaGravar = { ...edit };
-  delete dadosParaGravar.id;
-  delete dadosParaGravar.idOriginal;
-  delete dadosParaGravar.pastaOriginal;
+  // LOG DE DEBUG: Aperte F12 no navegador para ver isso
+  console.log("Tentando salvar na pasta:", pastaDestino);
+  console.log("ID detectado:", idOriginal);
+
+  // 2. Criamos uma cópia dos dados para não sujar o Firebase
+  const dadosParaEnviar = { ...edit };
+  delete dadosParaEnviar.id;
+  delete dadosParaEnviar.idOriginal;
+  delete dadosParaEnviar.pastaOriginal;
 
   try {
     if (idOriginal) {
-      // EDIÇÃO: doc(db, pasta, ID) obriga o Firebase a ir no endereço exato.
-      // O setDoc com merge: true substitui os dados sem criar um novo.
+      // 🟢 MODO EDIÇÃO (UPDATE)
+      // Usamos setDoc com o endereço EXATO do documento.
+      // Se o ID for 'sabor_1', ele vai SOBRESCREVER o 'sabor_1' e não criar outro.
       const docRef = doc(db, pastaDestino, String(idOriginal));
-      await setDoc(docRef, dadosParaGravar, { merge: true });
-      console.log("Editado com sucesso!");
+      await setDoc(docRef, dadosParaEnviar, { merge: true });
+      alert("Sucesso: Produto atualizado!");
     } else {
-      // NOVO: Só cria novo se não houver ID (botão NOVO)
-      await addDoc(collection(db, pastaDestino), { ...dadosParaGravar, isActive: true });
-      console.log("Novo item criado!");
+      // 🔵 MODO NOVO (CREATE)
+      // Se não existe ID, aí sim ele cria um do zero com ID aleatório
+      await addDoc(collection(db, pastaDestino), { ...dadosParaEnviar, isActive: true });
+      alert("Sucesso: Novo produto criado!");
     }
-    setEdit(null);
-    alert("Operação realizada com sucesso na Grandonna!");
+    
+    setEdit(null); // Fecha o modal
   } catch (err) {
-    alert("Erro ao salvar: " + err.message);
+    console.error("Erro ao salvar:", err);
+    alert("Erro no Firebase: " + err.message);
   }
 };
 
