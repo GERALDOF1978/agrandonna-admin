@@ -394,6 +394,8 @@ function MainApp() {
         await addDoc(collection(db, col), data);
       }
       setEdit(null);
+      // REFRESH FORÇADO PARA EVITAR FANTASMAS DUPLICADOS
+      window.location.reload(); 
     } catch (err) { alert("Erro ao guardar os dados: " + err.message); }
   };
 
@@ -402,8 +404,21 @@ function MainApp() {
     const col = getCollectionName(aba);
     if (!col) return;
     const newState = item.isActive === false ? true : false;
-    try { await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); } 
+    try { 
+      await setDoc(doc(db, col, String(item.id)), { isActive: newState }, { merge: true }); 
+      window.location.reload(); // Refresh também ao esgotar/ativar
+    } 
     catch (err) { alert("Erro ao atualizar disponibilidade: " + err.message); }
+  };
+
+  const apagarItem = async (item) => {
+    if (window.confirm('Eliminar permanentemente?')) {
+      const colName = getCollectionName(aba);
+      if(colName) {
+        await deleteDoc(doc(db, colName, String(item.id)));
+        window.location.reload(); // Refresh ao deletar
+      }
+    }
   };
 
   const totalPDV = useMemo(() => {
@@ -435,7 +450,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now() + Math.random(),
+        id: Date.now(),
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -463,7 +478,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -657,7 +672,6 @@ function MainApp() {
             <div className="flex-1 bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
                <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
                
-               {/* ADICIONADO A ABA PROMOÇÕES AQUI NO PDV */}
                <div className="flex gap-2 border-b border-gray-100 pb-4 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                  {['promocoes', 'tradicionais', 'doces', 'combos', 'ofertas', 'bebidas'].map((t, idx) => (
                    <button key={`aba-${idx}`} onClick={()=>setPdvAba(t)} className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
@@ -680,7 +694,7 @@ function MainApp() {
                      if (!temSaboresValidos) return null; // A MÁGICA DE ESCONDER O QUE NÃO TEM PREÇO!
 
                      return (
-                       <div key={`tam-${idx}`} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', isPromoOnly: pdvAba === 'promocoes', tamanho: t, maxFlavors: t.maxFlavors, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
+                       <div key={`tam-${idx}`} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', isPromoOnly: pdvAba === 'promocoes', tamanho: t, maxFlavors: t.maxFlavors || 1, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div className="flex items-center gap-4"><span className="text-3xl">{t.icon}</span><div><h4 className="font-black text-lg text-gray-800 uppercase">{t.name} {pdvAba === 'doces' ? 'Doce' : ''}</h4><p className="text-xs text-gray-500 font-bold">{t.description}</p></div></div>
                           <Plus size={24} className="text-gray-300 group-hover:text-red-500"/>
                        </div>
@@ -953,12 +967,7 @@ function MainApp() {
                       </button>
                     )}
                     <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
-                    <button onClick={async () => { 
-                      if (window.confirm('Eliminar permanentemente?')) {
-                        const colName = getCollectionName(aba);
-                        if(colName) await deleteDoc(doc(db, colName, String(it.id)));
-                      }
-                    }} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
+                    <button onClick={() => apagarItem(it)} className="p-3 text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               )})}</tbody>
@@ -1259,7 +1268,7 @@ function MainApp() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-              {/* ESCOLHA DE SABORES */}
+              {/* ESCOLHA DE SABORES COM INGREDIENTES */}
               {(pdvConfig.tipo === 'pizza' || pdvConfig.tipo === 'combo' || pdvConfig.tipo === 'oferta') && (
                 <div>
                   <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
