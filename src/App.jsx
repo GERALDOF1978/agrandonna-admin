@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useRef, Component } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, setDoc } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle } from 'lucide-react';
+// ✅ AQUI ESTAVA O CULPADO: Faltava o CheckCircle2 (o ícone de 'Concluído') nesta lista abaixo:
+import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle, CheckCircle2, Check } from 'lucide-react';
 
-// SISTEMA ANTI-TELA BRANCA E VERMELHA REAL
+// SISTEMA ANTI-TELA BRANCA REAL
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -65,7 +66,6 @@ const getCollectionName = (tab) => {
   }
 };
 
-// TAMANHOS CORRIGIDOS (Gigante 4, 1/2 Metro 3, 1 Metro 3)
 const TAMANHOS_FIXOS = [
   { id: 'broto', name: 'Broto', description: '4 Pedaços', maxFlavors: 1, icon: '🍕', order: 1 },
   { id: 'grande', name: 'Grande', description: '8 Pedaços', maxFlavors: 2, icon: '🍕', order: 2 },
@@ -153,7 +153,6 @@ function MainApp() {
     }
   };
 
-  // PREÇOS CEGOS - SEM ADIVINHAÇÃO, SÓ MOSTRA O QUE VOCÊ DIGITAR
   const getPrecoSabor = (sabor, tId) => {
     if (!sabor || !tId) return 0;
     if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
@@ -435,7 +434,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        id: Date.now() + Math.random(),
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -463,7 +462,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -658,7 +657,7 @@ function MainApp() {
                <h2 className="text-2xl font-black italic uppercase mb-4 text-gray-800">Cardápio Rápido</h2>
                
                {/* MENU DE CATEGORIAS DINÂMICO E QUEBRA DE LINHA (FLEX-WRAP) */}
-               <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-4 mb-4">
+               <div className="flex flex-wrap gap-2 border-b border-gray-100 pb-4 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                  {(() => {
                    const abas = [];
                    if ((sabores || []).some(s => s && s.isPromo)) abas.push('promocoes');
@@ -668,7 +667,7 @@ function MainApp() {
                    if ((bebidas || []).length > 0) abas.push('bebidas');
                    
                    return abas.map((t, idx) => (
-                     <button key={`aba-${idx}`} onClick={()=>setPdvAba(t)} className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                     <button key={`aba-${idx}`} onClick={()=>setPdvAba(t)} className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest shrink-0 transition-all ${pdvAba === t ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                        {t === 'promocoes' ? '🔥 Promoções' : t}
                      </button>
                    ));
