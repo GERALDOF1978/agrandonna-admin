@@ -394,7 +394,10 @@ const salvar = async (e) => {
   
   // 1. Pegamos os dados e os endereços
   const pastaDestino = edit.pastaOriginal || getCollectionName(aba);
-  const idParaGravar = edit.idOriginal || edit.id; 
+  const idParaGravar = edit.idOriginal || edit.id;
+
+  console.log("EDIT:", edit);
+  console.log("ID FINAL:", idParaGravar);
 
   // --- O VERIFICADOR (ALERTA DE SEGURANÇA) ---
   // Se isso aqui aparecer como "null" ou "undefined", o erro está no seu BOTÃO de editar.
