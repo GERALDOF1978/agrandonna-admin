@@ -1059,15 +1059,15 @@ const salvar = async (e) => {
                     )}
 
 <button 
-  onClick={() => {
-    // Verificamos no console se o 'it.id' existe antes de abrir o modal
-    console.log("ID capturado no clique:", it.id); 
-       setEdit({ 
-         ...it, 
-        id: it.id, // 🔥 ESSENCIAL (corrige duplicação)
-        pastaOriginal: getCollectionName(aba) 
-     });
-  }} 
+onClick={() => {
+  console.log("👉 CLIQUE EDITAR - ID:", it.id); // AQUI
+
+  setEdit({ 
+    ...it, 
+    id: it.id, // 🔥 GARANTE QUE VAI JUNTO
+  });
+}}
+
   className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"
 >
   <Edit2 size={16}/>
