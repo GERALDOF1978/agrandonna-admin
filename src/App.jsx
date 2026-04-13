@@ -389,22 +389,35 @@ function MainApp() {
     setIsUp(false);
   };
 
-  const salvar = async (e) => {
-    e.preventDefault();
-    const col = getCollectionName(aba);
-    if (!col) return alert("Erro interno: Categoria desconhecida.");
+const salvar = async (e) => {
+  e.preventDefault();
+  
+  // Se o item já tem uma categoria de destino gravada, usamos ela. 
+  // Se não (itens antigos), usamos a aba atual como plano B.
+  const colName = getCollectionName(edit.categoriaDestino || aba);
+  
+  if (!colName) return alert("Erro: Categoria não identificada.");
 
-    const data = { ...edit }; const id = data.id; delete data.id;
+  const data = { ...edit };
+  const id = data.id;
+  
+  // Limpamos o campo auxiliar antes de mandar pro Firebase
+  delete data.id;
+  delete data.categoriaDestino; 
 
-    try {
-      if (id) await setDoc(doc(db, col, String(id)), data, { merge: true });
-      else {
-        if (['sabores', 'bordas', 'bebidas', 'combos', 'ofertas'].includes(aba)) data.isActive = true;
-        await addDoc(collection(db, col), data);
-      }
-      setEdit(null);
-    } catch (err) { alert("Erro ao guardar os dados: " + err.message); }
-  };
+  try {
+    if (id) {
+      await setDoc(doc(db, colName, String(id)), data, { merge: true });
+    } else {
+      if (['sabores', 'bordas', 'bebidas', 'combos', 'ofertas'].includes(aba)) data.isActive = true;
+      await addDoc(collection(db, colName), data);
+    }
+    setEdit(null);
+    alert("Salvo com sucesso!");
+  } catch (err) {
+    alert("Erro ao salvar: " + err.message);
+  }
+};
 
   const toggleActive = async (item) => {
     if (!item || !item.id) return;
