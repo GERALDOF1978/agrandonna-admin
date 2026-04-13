@@ -392,30 +392,26 @@ function MainApp() {
 const salvar = async (e) => {
   e.preventDefault();
   
-  // Se o item já tem uma categoria de destino gravada, usamos ela. 
-  // Se não (itens antigos), usamos a aba atual como plano B.
-  const colName = getCollectionName(edit.categoriaDestino || aba);
-  
-  if (!colName) return alert("Erro: Categoria não identificada.");
+  // Ele vai usar a pasta que o botão 'carimbou'. Se não tiver, usa a aba.
+  const col = edit.pastaOriginal || getCollectionName(aba);
+  const idParaEditar = edit.idOriginal || edit.id; 
 
   const data = { ...edit };
-  const id = data.id;
-  
-  // Limpamos o campo auxiliar antes de mandar pro Firebase
   delete data.id;
-  delete data.categoriaDestino; 
+  delete data.idOriginal;
+  delete data.pastaOriginal;
 
   try {
-    if (id) {
-      await setDoc(doc(db, colName, String(id)), data, { merge: true });
+    if (idParaEditar) {
+      // Aqui ele vai direto no 'sabor_1' e faz o UPDATE, sem criar duplicata
+      await setDoc(doc(db, col, String(idParaEditar)), data, { merge: true });
     } else {
-      if (['sabores', 'bordas', 'bebidas', 'combos', 'ofertas'].includes(aba)) data.isActive = true;
-      await addDoc(collection(db, colName), data);
+      // Só cria novo se não tiver ID nenhum
+      await addDoc(collection(db, col), data);
     }
     setEdit(null);
-    alert("Salvo com sucesso!");
   } catch (err) {
-    alert("Erro ao salvar: " + err.message);
+    alert("Erro: " + err.message);
   }
 };
 
@@ -1048,7 +1044,17 @@ const salvar = async (e) => {
                         {it.isActive === false ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </button>
                     )}
-                    <button onClick={() => setEdit(it)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Edit2 size={16}/></button>
+
+                    <button 
+  onClick={() => setEdit({ 
+    ...it, 
+    idOriginal: it.id, // Garante que o ID completo (sabor_1) fique guardado
+    pastaOriginal: getCollectionName(aba) // Carimba a pasta de onde ele veio
+  })} 
+  className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"
+>
+  <Edit2 size={16}/>
+</button>
                     <button onClick={async () => { 
                       if (window.confirm('Eliminar permanentemente?')) {
                         const colName = getCollectionName(aba);
