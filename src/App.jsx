@@ -392,26 +392,32 @@ function MainApp() {
 const salvar = async (e) => {
   e.preventDefault();
   
-  // Ele vai usar a pasta que o botão 'carimbou'. Se não tiver, usa a aba.
-  const col = edit.pastaOriginal || getCollectionName(aba);
-  const idParaEditar = edit.idOriginal || edit.id; 
+  // 1. Pega os dados que o botão 'carimbou'
+  const pastaDestino = edit.pastaOriginal || getCollectionName(aba);
+  const idOriginal = edit.idOriginal || edit.id; 
 
-  const data = { ...edit };
-  delete data.id;
-  delete data.idOriginal;
-  delete data.pastaOriginal;
+  // 2. Faz uma cópia limpa para o Firebase (sem campos de controle)
+  const dadosParaGravar = { ...edit };
+  delete dadosParaGravar.id;
+  delete dadosParaGravar.idOriginal;
+  delete dadosParaGravar.pastaOriginal;
 
   try {
-    if (idParaEditar) {
-      // Aqui ele vai direto no 'sabor_1' e faz o UPDATE, sem criar duplicata
-      await setDoc(doc(db, col, String(idParaEditar)), data, { merge: true });
+    if (idOriginal) {
+      // EDIÇÃO: doc(db, pasta, ID) obriga o Firebase a ir no endereço exato.
+      // O setDoc com merge: true substitui os dados sem criar um novo.
+      const docRef = doc(db, pastaDestino, String(idOriginal));
+      await setDoc(docRef, dadosParaGravar, { merge: true });
+      console.log("Editado com sucesso!");
     } else {
-      // Só cria novo se não tiver ID nenhum
-      await addDoc(collection(db, col), data);
+      // NOVO: Só cria novo se não houver ID (botão NOVO)
+      await addDoc(collection(db, pastaDestino), { ...dadosParaGravar, isActive: true });
+      console.log("Novo item criado!");
     }
     setEdit(null);
+    alert("Operação realizada com sucesso na Grandonna!");
   } catch (err) {
-    alert("Erro: " + err.message);
+    alert("Erro ao salvar: " + err.message);
   }
 };
 
