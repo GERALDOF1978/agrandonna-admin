@@ -1059,15 +1059,11 @@ const salvar = async (e) => {
                     )}
 
 <button 
-onClick={() => {
-  console.log("👉 CLIQUE EDITAR - ID:", it.id); // AQUI
-
-  setEdit({ 
-    ...it, 
-    id: it.id, // 🔥 GARANTE QUE VAI JUNTO
-  });
-}}
-
+onClick={() => setEdit({
+  ...item,
+  idOriginal: item.id,
+  pastaOriginal: getCollectionName(aba)
+})}
   className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"
 >
   <Edit2 size={16}/>
