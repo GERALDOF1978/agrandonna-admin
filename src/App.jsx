@@ -4,7 +4,6 @@ import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { Pizza, CupSoda, Plus, Edit2, Trash2, X, ClipboardList, MapPin, Settings, User, ImageIcon, Power, Phone, Printer, MessageCircle, Send, Upload, BarChart3, Users, LogOut, Search, Loader2, Eye, EyeOff, Flame, History, Image as ImgIcon, Wand2, Save, CircleDashed, Package, Ticket, Calculator, Minus, AlertTriangle } from 'lucide-react';
 
-// SISTEMA ANTI-TELA BRANCA REAL (ERROR BOUNDARY)
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -87,7 +86,7 @@ function MainApp() {
   const [hasPerm, setHasPerm] = useState(false);
   const [aba, setAba] = useState('pdv'); 
   const [pedidos, setPedidos] = useState([]);
-  const [tamanhos] = useState(TAMANHOS_FIXOS); // <--- AQUI ESTÁ O HERÓI QUE FALTAVA
+  const [tamanhos] = useState(TAMANHOS_FIXOS);
   const [sabores, setSabores] = useState([]);
   const [bordas, setBordas] = useState([]); 
   const [bebidas, setBebidas] = useState([]);
@@ -152,28 +151,17 @@ function MainApp() {
     }
   };
 
+  // CÁLCULO CEGO (SEM ADIVINHAÇÃO)
   const getPrecoSabor = (sabor, tId) => {
+    if (!sabor || !tId) return 0;
     if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
-    const p = sabor?.prices?.[tId];
-    if (p && Number(p) > 0) return Number(p);
-    const doce = isPizzaDoce(sabor);
-    if (!doce) {
-      if (tId === 'broto') return 34.00;
-      if (tId === 'grande') return 56.00;
-      if (tId === 'gigante') return 88.00;
-      if (tId === 'meio_metro') return 57.90;
-      if (tId === 'um_metro') return 87.90;
-    } else {
-      if (tId === 'grande') return 53.00;
-      if (tId === 'meio_metro') return 59.00;
-    }
-    return 0;
+    return Number(sabor?.prices?.[tId] || 0);
   };
 
   const getPrecoBorda = (borda, tId) => {
+    if (!borda || !tId) return 0;
     if (pdvConfig?.tipo === 'combo' || pdvConfig?.tipo === 'oferta') return 0; 
-    const p = borda?.prices?.[tId];
-    return p && Number(p) > 0 ? Number(p) : 0;
+    return Number(borda?.prices?.[tId] || 0);
   };
 
   useEffect(() => {
@@ -452,7 +440,7 @@ function MainApp() {
     }
 
     setPdvCart([...(pdvCart || []), {
-        id: Date.now(), 
+        id: Date.now() + Math.random(),
         tipo: pdvConfig.tipo,
         name: name,
         tamanho: pdvConfig.tamanho,
@@ -480,7 +468,7 @@ function MainApp() {
       setPdvCart(newCart);
     } else if (delta > 0) {
       setPdvCart([...(pdvCart || []), { 
-        id: Date.now(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
+        id: Date.now() + Math.random(), itemId: bebida.id, tipo: 'bebida', precoBase: Number(bebida.price || 0), preco: Number(bebida.price || 0), name: bebida.name || 'Bebida', qtd: 1 
       }]);
     }
   };
@@ -683,7 +671,7 @@ function MainApp() {
                </div>
 
                <div className="flex-1 overflow-y-auto pr-2 grid gap-3 align-top content-start">
-                  {['tradicionais', 'doces'].includes(pdvAba) && tamanhos.map((t, idx) => (
+                  {['tradicionais', 'doces'].includes(pdvAba) && (tamanhos || []).map((t, idx) => (
                      <div key={`tam-${idx}`} onClick={() => setPdvConfig({ tipo: 'pizza', isDoce: pdvAba === 'doces', tamanho: t, maxFlavors: t.maxFlavors, item: null })} className="bg-gray-50 p-5 rounded-3xl border border-gray-200 hover:border-red-500 cursor-pointer transition-colors flex justify-between items-center group">
                         <div className="flex items-center gap-4"><span className="text-3xl">{t.icon}</span><div><h4 className="font-black text-lg text-gray-800 uppercase">{t.name} {pdvAba === 'doces' ? 'Doce' : ''}</h4><p className="text-xs text-gray-500 font-bold">{t.description}</p></div></div>
                         <Plus size={24} className="text-gray-300 group-hover:text-red-500"/>
@@ -692,7 +680,7 @@ function MainApp() {
 
                   {pdvAba === 'combos' && Array.isArray(combos) && combos.map((c, idx) => {
                      if(!c) return null;
-                     const tamRef = tamanhos.find(t => t.id === c.tamanhoId);
+                     const tamRef = (tamanhos || []).find(t => t && t.id === c.tamanhoId);
                      return (
                        <div key={c.id || `combo-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'combo', item: c, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1, maxBebidas: c.qtdBebidas || 1 })} className="bg-purple-50 p-5 rounded-3xl border border-purple-100 hover:border-purple-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
@@ -707,7 +695,7 @@ function MainApp() {
 
                   {pdvAba === 'ofertas' && Array.isArray(ofertas) && ofertas.map((o, idx) => {
                      if(!o) return null;
-                     const tamRef = tamanhos.find(t => t.id === o.tamanhoId);
+                     const tamRef = (tamanhos || []).find(t => t && t.id === o.tamanhoId);
                      return (
                        <div key={o.id || `oferta-item-${idx}`} onClick={() => setPdvConfig({ tipo: 'oferta', item: o, tamanho: tamRef, maxFlavors: tamRef?.maxFlavors || 1 })} className="bg-green-50 p-5 rounded-3xl border border-green-100 hover:border-green-500 cursor-pointer transition-colors flex justify-between items-center group">
                           <div>
@@ -939,11 +927,11 @@ function MainApp() {
 
                     {['sabores', 'bordas'].includes(aba) && it.prices && (
                       <div className="flex flex-wrap gap-1 max-w-[250px]">
-                        {it.prices.broto > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {Number(it.prices.broto||0).toFixed(2)}</span>}
-                        {it.prices.grande > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gra: R$ {Number(it.prices.grande||0).toFixed(2)}</span>}
-                        {it.prices.gigante > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gig: R$ {Number(it.prices.gigante||0).toFixed(2)}</span>}
-                        {it.prices.meio_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1/2M: R$ {Number(it.prices.meio_metro||0).toFixed(2)}</span>}
-                        {it.prices.um_metro > 0 && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1M: R$ {Number(it.prices.um_metro||0).toFixed(2)}</span>}
+                        {it.prices.broto !== undefined && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Bro: R$ {Number(it.prices.broto||0).toFixed(2)}</span>}
+                        {it.prices.grande !== undefined && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gra: R$ {Number(it.prices.grande||0).toFixed(2)}</span>}
+                        {it.prices.gigante !== undefined && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>Gig: R$ {Number(it.prices.gigante||0).toFixed(2)}</span>}
+                        {it.prices.meio_metro !== undefined && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1/2M: R$ {Number(it.prices.meio_metro||0).toFixed(2)}</span>}
+                        {it.prices.um_metro !== undefined && <span className={`px-2 py-0.5 rounded text-[9px] ${it.isActive === false ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>1M: R$ {Number(it.prices.um_metro||0).toFixed(2)}</span>}
                       </div>
                     )}
                     {aba === 'equipe' && <span className="lowercase">{it.email}</span>}
@@ -1235,7 +1223,7 @@ function MainApp() {
                   {['broto', 'grande', 'gigante', 'meio_metro', 'um_metro'].map((t, idx) => (
                     <div key={`edit-tam-${idx}`}>
                       <label className="text-[10px] uppercase font-black text-gray-400 px-3">{t.replace('_',' ')}</label>
-                      <input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.prices?.[t] || 0} onChange={e => setEdit({ ...edit, prices: { ...(edit.prices || {}), [t]: parseFloat(e.target.value) } })}/>
+                      <input type="number" step="0.01" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:border-red-500 transition-colors" value={edit.prices?.[t] || ''} onChange={e => setEdit({ ...edit, prices: { ...(edit.prices || {}), [t]: parseFloat(e.target.value) } })}/>
                     </div>
                   ))}
                 </div>
@@ -1266,23 +1254,25 @@ function MainApp() {
               {(pdvConfig.tipo === 'pizza' || pdvConfig.tipo === 'combo' || pdvConfig.tipo === 'oferta') && (
                 <div>
                   <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
-                    <span>Sabores ({pdvSelS.length} / {pdvConfig.maxFlavors})</span>
-                    {pdvSelS.length === pdvConfig.maxFlavors && <CheckCircle2 size={16} className="text-green-500"/>}
+                    <span>Sabores ({(pdvSelS || []).length} / {pdvConfig.maxFlavors})</span>
+                    {(pdvSelS || []).length === pdvConfig.maxFlavors && <CheckCircle2 size={16} className="text-green-500"/>}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
                     {(() => {
                       let lista = [];
-                      if (pdvConfig.tipo === 'combo') lista = sabores.filter(s => s.isCombo);
-                      else if (pdvConfig.tipo === 'oferta') lista = sabores.filter(s => s.isOferta);
-                      else lista = sabores.filter(s => pdvConfig.isDoce ? isPizzaDoce(s) : !isPizzaDoce(s));
+                      if (pdvConfig.tipo === 'combo') lista = (sabores || []).filter(s => s && s.isCombo);
+                      else if (pdvConfig.tipo === 'oferta') lista = (sabores || []).filter(s => s && s.isOferta);
+                      else lista = (sabores || []).filter(s => s && (pdvConfig.isDoce ? isPizzaDoce(s) : !isPizzaDoce(s)));
 
-                      const validos = lista.filter(s => pdvConfig.tipo !== 'pizza' || getPrecoSabor(s, pdvConfig.tamanho?.id) > 0);
+                      const validos = lista.filter(s => s && (pdvConfig.tipo !== 'pizza' || getPrecoSabor(s, pdvConfig.tamanho?.id) > 0));
+
+                      if(validos.length === 0) return <p className="text-xs text-gray-400 col-span-2">Nenhum sabor habilitado.</p>
 
                       return validos.map((s, idx) => {
-                        const isSel = pdvSelS.some(x => x.id === s.id);
-                        const isFull = !isSel && pdvSelS.length >= pdvConfig.maxFlavors;
+                        const isSel = (pdvSelS || []).some(x => x && x.id === s.id);
+                        const isFull = !isSel && (pdvSelS || []).length >= (pdvConfig.maxFlavors || 1);
                         return (
-                          <div key={s.id || `sabor-${idx}`} onClick={() => !isFull && (isSel ? setPdvSelS(pdvSelS.filter(x=>x.id!==s.id)) : setPdvSelS([...pdvSelS, s]))} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-red-500 bg-red-50' : isFull ? 'opacity-40 border-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <div key={s.id || `sabor-${idx}`} onClick={() => !isFull && (isSel ? setPdvSelS((pdvSelS || []).filter(x=>x && x.id!==s.id)) : setPdvSelS([...(pdvSelS || []), s]))} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-red-500 bg-red-50' : isFull ? 'opacity-40 border-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                             <p className={`text-[10px] font-black uppercase leading-tight ${isSel ? 'text-red-600' : 'text-gray-700'}`}>{s.name}</p>
                             {pdvConfig.tipo === 'pizza' && <p className="text-[9px] text-gray-400 mt-1">+ R$ {Number(getPrecoSabor(s, pdvConfig.tamanho?.id) || 0).toFixed(2)}</p>}
                           </div>
@@ -1294,14 +1284,14 @@ function MainApp() {
               )}
 
               {/* ESCOLHA DE BORDA (SÓ PARA PIZZA NORMAL) */}
-              {pdvConfig.tipo === 'pizza' && pdvSelS.length > 0 && bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).length > 0 && (
+              {pdvConfig.tipo === 'pizza' && (pdvSelS || []).length > 0 && (bordas || []).filter(b => b && getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).length > 0 && (
                 <div>
                   <h3 className="font-black text-xs text-gray-500 uppercase mb-3">Borda Recheada</h3>
                   <div className="grid grid-cols-2 gap-2">
                     <div onClick={() => setPdvSelBorda(null)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${!pdvSelBorda ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
                       <p className={`text-[10px] font-black uppercase ${!pdvSelBorda ? 'text-orange-600' : 'text-gray-700'}`}>Sem Borda</p>
                     </div>
-                    {bordas.filter(b => getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).map((b, idx) => {
+                    {(bordas || []).filter(b => b && getPrecoBorda(b, pdvConfig.tamanho?.id) > 0).map((b, idx) => {
                       const isSel = pdvSelBorda?.id === b.id;
                       return (
                         <div key={b.id || `borda-${idx}`} onClick={() => setPdvSelBorda(b)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${isSel ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -1315,27 +1305,27 @@ function MainApp() {
               )}
 
               {/* BEBIDAS (SÓ PARA COMBO) */}
-              {pdvConfig.tipo === 'combo' && pdvConfig.maxBebidas > 0 && pdvSelS.length > 0 && (
+              {pdvConfig.tipo === 'combo' && pdvConfig.maxBebidas > 0 && (pdvSelS || []).length > 0 && (
                 <div>
                   <h3 className="font-black text-xs text-gray-500 uppercase mb-3 flex justify-between">
-                    <span>Bebidas Inclusas ({pdvSelBebidas.length} / {pdvConfig.maxBebidas})</span>
-                    {pdvSelBebidas.length === pdvConfig.maxBebidas && <CheckCircle2 size={16} className="text-purple-500"/>}
+                    <span>Bebidas Inclusas ({(pdvSelBebidas || []).length} / {pdvConfig.maxBebidas})</span>
+                    {(pdvSelBebidas || []).length === pdvConfig.maxBebidas && <CheckCircle2 size={16} className="text-purple-500"/>}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {bebidas.filter(b => b.isCombo).map((b, idx) => {
-                      const qtd = pdvSelBebidas.filter(x => x.id === b.id).length;
+                    {(bebidas || []).filter(b => b && b.isCombo).map((b, idx) => {
+                      const qtd = (pdvSelBebidas || []).filter(x => x && x.id === b.id).length;
                       return (
                         <div key={b.id || `beb-${idx}`} className="p-3 rounded-2xl border-2 border-gray-200 bg-gray-50 flex flex-col justify-between items-center gap-2">
                           <p className="text-[10px] font-black text-gray-700 uppercase text-center leading-tight">{b.name}</p>
                           <div className="flex items-center gap-2">
                             {qtd > 0 && <button onClick={() => {
-                              const idx = pdvSelBebidas.findIndex(x => x.id === b.id);
+                              const idx = (pdvSelBebidas || []).findIndex(x => x && x.id === b.id);
                               if(idx !== -1) { const n = [...pdvSelBebidas]; n.splice(idx, 1); setPdvSelBebidas(n); }
                             }} className="w-6 h-6 bg-gray-300 rounded text-gray-700 font-bold flex justify-center items-center"><Minus size={12}/></button>}
                             {qtd > 0 && <span className="text-[10px] font-black text-purple-600">{qtd}</span>}
                             <button onClick={() => {
-                              if(pdvSelBebidas.length < pdvConfig.maxBebidas) setPdvSelBebidas([...pdvSelBebidas, b]);
-                            }} disabled={pdvSelBebidas.length >= pdvConfig.maxBebidas} className="w-6 h-6 bg-purple-600 rounded text-white font-bold flex justify-center items-center disabled:opacity-50"><Plus size={12}/></button>
+                              if((pdvSelBebidas || []).length < pdvConfig.maxBebidas) setPdvSelBebidas([...(pdvSelBebidas || []), b]);
+                            }} disabled={(pdvSelBebidas || []).length >= pdvConfig.maxBebidas} className="w-6 h-6 bg-purple-600 rounded text-white font-bold flex justify-center items-center disabled:opacity-50"><Plus size={12}/></button>
                           </div>
                         </div>
                       )
@@ -1347,7 +1337,7 @@ function MainApp() {
 
             <button 
               onClick={addPdvItem}
-              disabled={pdvSelS.length === 0 || (pdvConfig.tipo === 'combo' && pdvSelBebidas.length < pdvConfig.maxBebidas)}
+              disabled={(pdvSelS || []).length === 0 || (pdvConfig.tipo === 'combo' && (pdvSelBebidas || []).length < pdvConfig.maxBebidas)}
               className="mt-6 w-full bg-red-600 text-white p-4 rounded-[20px] font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
               <Plus size={18}/> Adicionar ao Pedido
