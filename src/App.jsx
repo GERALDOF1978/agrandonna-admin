@@ -1068,7 +1068,7 @@ onClick={() => setEdit({
   pastaOriginal: getCollectionName(aba)
 })}
   className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"
->
+
   <Edit2 size={16}/>
 </button>
                     <button onClick={async () => { 
