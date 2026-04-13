@@ -392,42 +392,33 @@ function MainApp() {
 const salvar = async (e) => {
   e.preventDefault();
   
-  // 1. Pegamos os dados e os endereços
-  const pastaDestino = edit.pastaOriginal || getCollectionName(aba);
-  const idParaGravar = edit.idOriginal || edit.id;
+  const colName = edit.pastaOriginal || getCollectionName(aba);
+  
+  // Pegamos o docId (sabor_10). Se não tiver, é porque é um item novo.
+  const idDoFirebase = edit.docId; 
 
-  console.log("EDIT:", edit);
-  console.log("ID FINAL:", idParaGravar);
-
-  // --- O VERIFICADOR (ALERTA DE SEGURANÇA) ---
-  // Se isso aqui aparecer como "null" ou "undefined", o erro está no seu BOTÃO de editar.
-  if (!idParaGravar && edit.id !== undefined) {
-     console.log("DADOS DO OBJETO EDIT NO MOMENTO:", edit);
-  }
-
-  // 2. Criamos uma cópia limpa para enviar ao Firebase
-  const dadosLimpos = { ...edit };
-  delete dadosLimpos.id;
-  delete dadosLimpos.idOriginal;
-  delete dadosLimpos.pastaOriginal;
+  const dadosParaEnviar = { ...edit };
+  
+  // LIMPAMOS as variáveis de controle para não salvar sujeira no banco
+  delete dadosParaEnviar.id;        // Deleta o '10' ou 'sabor_10' se estiver aqui
+  delete dadosParaEnviar.docId;     // Deleta o campo temporário
+  delete dadosParaEnviar.pastaOriginal;
 
   try {
-    // 3. A LÓGICA INFALÍVEL
-    if (idParaGravar) {
-      // EDITAR (UPDATE): doc(db, pasta, ID) obriga o Firebase a ir no registro que já existe.
-      const docRef = doc(db, pastaDestino, String(idParaGravar));
-      await setDoc(docRef, dadosLimpos, { merge: true });
-      alert("✅ SUCESSO: O item " + idParaGravar + " foi EDITADO.");
+    if (idDoFirebase) {
+      // --- MODO EDIÇÃO ---
+      // Usamos o String(idDoFirebase) que garante que ele vai buscar o 'sabor_10'
+      const docRef = doc(db, colName, String(idDoFirebase));
+      await setDoc(docRef, dadosParaEnviar, { merge: true });
+      alert("✅ Editado: " + idDoFirebase);
     } else {
-      // CRIAR NOVO (CREATE): Só entra aqui se idParaGravar for VAZIO.
-      await addDoc(collection(db, pastaDestino), { ...dadosLimpos, isActive: true });
-      alert("🆕 SUCESSO: Um NOVO item foi criado (porque não achei o ID).");
+      // --- MODO NOVO ---
+      await addDoc(collection(db, colName), { ...dadosParaEnviar, isActive: true });
+      alert("🆕 Criado novo item!");
     }
-
-    setEdit(null); // Fecha o modal
+    setEdit(null);
   } catch (err) {
-    console.error("ERRO CRÍTICO NO FIREBASE:", err);
-    alert("❌ ERRO: " + err.message);
+    alert("❌ Erro: " + err.message);
   }
 };
 
@@ -1062,11 +1053,11 @@ const salvar = async (e) => {
                     )}
 
 <button 
-onClick={() => setEdit({
-  ...it,
-  idOriginal: it.id,
-  pastaOriginal: getCollectionName(aba)
-})}
+  onClick={() => setEdit({ 
+    ...it, 
+    docId: it.id, // O 'sabor_10' agora se chama docId
+    pastaOriginal: getCollectionName(aba) 
+  })} 
   className="p-3 text-blue-600 hover:bg-blue-50 rounded-2xl"
 >
   <Edit2 size={16}/>

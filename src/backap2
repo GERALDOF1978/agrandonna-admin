@@ -204,8 +204,26 @@ function MainApp() {
       setPedidos(data || []);
     });
 
-    const unsubS = onSnapshot(collection(db, 'menu_sabores'), s => setSabores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubBordas = onSnapshot(collection(db, 'menu_bordas'), s => setBordas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
+    const unsubS = onSnapshot(collection(db, 'menu_sabores'), s =>
+  setSabores(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id // 👈 SEMPRE POR ÚLTIMO
+  })))
+);
+
+menu_sabores
+menu_bordas
+menu_bebidas
+menu_combos
+menu_ofertas
+menu_banners
+admin_users
+    const unsubBordas = onSnapshot(collection(db, 'menu_sabores'), s =>
+  setSabores(s.docs.map(d => ({ 
+    ...d.data(),
+    id: d.id // 👈 SEMPRE POR ÚLTIMO
+  })))
+);
     const unsubB = onSnapshot(collection(db, 'menu_bebidas'), s => setBebidas(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubCombos = onSnapshot(collection(db, 'menu_combos'), s => setCombos(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubOfertas = onSnapshot(collection(db, 'menu_ofertas'), s => setOfertas(s.docs.map(d => ({ id: d.id, ...d.data() })))); 
